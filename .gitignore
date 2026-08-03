@@ -1,0 +1,51 @@
+# Dependencies
+node_modules/
+client/node_modules/
+server/node_modules/
+
+# Production Builds & Output
+dist/
+client/dist/
+build/
+client/build/
+dist-ssr/
+
+# Logs & Debugging
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Environment Variables & Secrets
+.env
+.env.local
+.env.*.local
+client/.env
+server/.env
+
+# IDE / Editor Files
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS Generated Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Cache & Temporary Directories
+.cache/
+.vite/
+client/.vite/
