@@ -1,0 +1,63 @@
+body {
+    margin: 0;
+    padding: 0;
+    background: #f4f7fe;
+    font-family: Segoe UI, Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.dashboard-container {
+    flex: 1;
+    padding: 30px;
+    background: #f4f7fe;
+    min-height: 100vh;
+}
+
+.dashboard-grid {
+
+    display: grid;
+
+    grid-template-columns: repeat(4, 1fr);
+
+    gap: 20px;
+
+}
+
+.dashboard-card {
+
+    background: #fff;
+
+    border-radius: 18px;
+
+    padding: 25px;
+
+    transition: .3s;
+
+    box-shadow: 0 12px 25px rgba(0, 0, 0, .08);
+
+}
+
+.dashboard-card:hover {
+
+    transform: translateY(-8px);
+
+    box-shadow: 0 20px 35px rgba(0, 0, 0, .18);
+
+}
+
+.dashboard-title {
+
+    font-size: 18px;
+
+    color: #666;
+
+}
+
+.dashboard-value {
+
+    font-size: 35px;
+
+    font-weight: bold;
+
+    margin-top: 10px;
+
+}

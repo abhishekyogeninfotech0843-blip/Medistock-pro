@@ -1,0 +1,61 @@
+/* =========================
+   Premium Sidebar
+========================= */
+
+.sidebar {
+    width: 260px;
+    height: 100vh;
+    background: linear-gradient(180deg, #1e3a8a 0%, #0f172a 100%);
+    color: #ffffff;
+    padding: 25px 18px;
+    box-sizing: border-box;
+    position: sticky;
+    top: 0;
+    box-shadow: 4px 0 20px rgba(0, 0, 0, 0.15);
+}
+
+.sidebar-logo {
+    text-align: center;
+    font-size: 24px;
+    font-weight: bold;
+    margin-bottom: 35px;
+    color: #ffffff;
+}
+
+.sidebar-menu {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.sidebar-link {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: #ffffff;
+    text-decoration: none;
+    padding: 14px 16px;
+    border-radius: 12px;
+    font-size: 16px;
+    transition: all 0.3s ease;
+}
+
+.sidebar-link:hover {
+    background: rgba(255, 255, 255, 0.15);
+    transform: translateX(6px);
+}
+
+.sidebar-link svg {
+    font-size: 18px;
+}
+
+.sidebar-footer {
+    position: absolute;
+    bottom: 20px;
+    left: 18px;
+    right: 18px;
+    border-top: 1px solid rgba(255, 255, 255, 0.2);
+    padding-top: 15px;
+    font-size: 14px;
+    color: #dbeafe;
+}
