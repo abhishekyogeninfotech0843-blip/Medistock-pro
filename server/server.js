@@ -3,6 +3,7 @@ const dotenv = require("dotenv");
 const cors = require("cors");
 
 const connectDB = require("./config/db");
+const seedAdmin = require("./scripts/seedAdmin");
 
 // ==========================
 // Routes
@@ -32,7 +33,11 @@ const expiryScheduler = require("./schedulers/expiryScheduler");
 dotenv.config();
 
 // Database Connection
-connectDB();
+connectDB()
+  .then(() => seedAdmin({ disconnectAfter: false }))
+  .catch((error) => {
+    console.error("❌ Startup seeding failed:", error.message);
+  });
 
 const app = express();
 
@@ -91,7 +96,7 @@ expiryScheduler();
 // ==========================
 // Server
 // ==========================
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
 
 app.listen(PORT, () => {
   console.log(`🚀 Server Running on Port ${PORT}`);

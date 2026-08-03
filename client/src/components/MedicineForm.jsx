@@ -1,6 +1,7 @@
-import { useState } from "react";
+import React, { useState } from "react";
+import toast from "react-hot-toast";
+import { FaPills, FaBuilding, FaTag, FaBarcode, FaCalendarAlt, FaDollarSign, FaBoxes, FaCheck, FaTimes } from "react-icons/fa";
 import { addMedicine } from "../services/medicineService";
-import "./MedicineForm.css";
 
 const initialState = {
   name: "",
@@ -14,7 +15,7 @@ const initialState = {
   minimumStock: "",
 };
 
-const MedicineForm = ({ onSuccess }) => {
+const MedicineForm = ({ onSuccess, onClose }) => {
   const [formData, setFormData] = useState(initialState);
   const [loading, setLoading] = useState(false);
 
@@ -22,94 +23,230 @@ const MedicineForm = ({ onSuccess }) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
+  const calculateMargin = () => {
+    const p = parseFloat(formData.purchasePrice);
+    const s = parseFloat(formData.sellingPrice);
+    if (p > 0 && s > 0) {
+      const margin = ((s - p) / p) * 100;
+      return margin.toFixed(1);
+    }
+    return null;
+  };
+
+  const margin = calculateMargin();
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
       setLoading(true);
       await addMedicine(formData);
-      alert("✅ Medicine Added Successfully");
+      toast.success(`Medicine "${formData.name}" added successfully!`);
       setFormData(initialState);
       if (onSuccess) onSuccess();
+      if (onClose) onClose();
     } catch (err) {
       console.error(err);
-      alert(err.response?.data?.message || "Failed to add medicine");
+      toast.error(err.response?.data?.message || "Failed to add medicine");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <form className="medicine-form" onSubmit={handleSubmit}>
-      <input
-        name="name"
-        placeholder="Medicine Name"
-        value={formData.name}
-        onChange={handleChange}
-        required
-      />
-      <input
-        name="company"
-        placeholder="Company"
-        value={formData.company}
-        onChange={handleChange}
-        required
-      />
-      <input
-        name="category"
-        placeholder="Category"
-        value={formData.category}
-        onChange={handleChange}
-        required
-      />
-      <input
-        name="batchNo"
-        placeholder="Batch Number"
-        value={formData.batchNo}
-        onChange={handleChange}
-        required
-      />
-      <input
-        type="number"
-        name="purchasePrice"
-        placeholder="Purchase Price"
-        value={formData.purchasePrice}
-        onChange={handleChange}
-        required
-      />
-      <input
-        type="number"
-        name="sellingPrice"
-        placeholder="Selling Price"
-        value={formData.sellingPrice}
-        onChange={handleChange}
-        required
-      />
-      <input
-        type="number"
-        name="stock"
-        placeholder="Stock"
-        value={formData.stock}
-        onChange={handleChange}
-        required
-      />
-      <input
-        type="number"
-        name="minimumStock"
-        placeholder="Minimum Stock"
-        value={formData.minimumStock}
-        onChange={handleChange}
-        required
-      />
-      <input
-        type="date"
-        name="expiryDate"
-        value={formData.expiryDate}
-        onChange={handleChange}
-        required
-      />
-      <button type="submit" disabled={loading}>
-        {loading ? "Adding..." : "Add Medicine"}
-      </button>
+    <form onSubmit={handleSubmit} className="space-y-5 font-sans">
+      <div className="flex items-center justify-between pb-4 border-b border-slate-200">
+        <div>
+          <h3 className="text-lg font-extrabold text-slate-900 flex items-center gap-2">
+            <div className="h-9 w-9 rounded-xl bg-sky-500/10 text-sky-600 flex items-center justify-center">
+              <FaPills className="text-lg" />
+            </div>
+            Add New Medicine SKU
+          </h3>
+          <p className="text-xs text-slate-500 font-medium">Fill in batch details, prices, and stock limits</p>
+        </div>
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            className="h-8 w-8 rounded-lg bg-slate-100 text-slate-500 hover:text-slate-800 flex items-center justify-center transition"
+          >
+            <FaTimes />
+          </button>
+        )}
+      </div>
+
+      {/* Grid Inputs */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Name */}
+        <div>
+          <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+            Medicine Name *
+          </label>
+          <input
+            name="name"
+            placeholder="e.g. Amoxicillin 500mg"
+            value={formData.name}
+            onChange={handleChange}
+            required
+            className="w-full rounded-xl bg-slate-50 border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:bg-white"
+          />
+        </div>
+
+        {/* Category */}
+        <div>
+          <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+            Category *
+          </label>
+          <input
+            name="category"
+            placeholder="e.g. Antibiotics"
+            value={formData.category}
+            onChange={handleChange}
+            required
+            className="w-full rounded-xl bg-slate-50 border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:bg-white"
+          />
+        </div>
+
+        {/* Company */}
+        <div>
+          <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+            Manufacturer / Company *
+          </label>
+          <input
+            name="company"
+            placeholder="e.g. Pfizer Inc."
+            value={formData.company}
+            onChange={handleChange}
+            required
+            className="w-full rounded-xl bg-slate-50 border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:bg-white"
+          />
+        </div>
+
+        {/* Batch Number */}
+        <div>
+          <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+            Batch Number *
+          </label>
+          <input
+            name="batchNo"
+            placeholder="e.g. BATCH-2026-99"
+            value={formData.batchNo}
+            onChange={handleChange}
+            required
+            className="w-full rounded-xl bg-slate-50 border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:bg-white font-mono text-xs"
+          />
+        </div>
+
+        {/* Purchase Price */}
+        <div>
+          <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+            Purchase Price (₹) *
+          </label>
+          <input
+            type="number"
+            step="0.01"
+            name="purchasePrice"
+            placeholder="0.00"
+            value={formData.purchasePrice}
+            onChange={handleChange}
+            required
+            className="w-full rounded-xl bg-slate-50 border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:bg-white"
+          />
+        </div>
+
+        {/* Selling Price */}
+        <div>
+          <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+            Selling Price (₹) *
+          </label>
+          <input
+            type="number"
+            step="0.01"
+            name="sellingPrice"
+            placeholder="0.00"
+            value={formData.sellingPrice}
+            onChange={handleChange}
+            required
+            className="w-full rounded-xl bg-slate-50 border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:bg-white"
+          />
+        </div>
+
+        {/* Stock Quantity */}
+        <div>
+          <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+            Initial Stock Units *
+          </label>
+          <input
+            type="number"
+            name="stock"
+            placeholder="100"
+            value={formData.stock}
+            onChange={handleChange}
+            required
+            className="w-full rounded-xl bg-slate-50 border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:bg-white"
+          />
+        </div>
+
+        {/* Minimum Stock Limit */}
+        <div>
+          <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+            Reorder Alert Limit *
+          </label>
+          <input
+            type="number"
+            name="minimumStock"
+            placeholder="10"
+            value={formData.minimumStock}
+            onChange={handleChange}
+            required
+            className="w-full rounded-xl bg-slate-50 border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:bg-white"
+          />
+        </div>
+
+        {/* Expiry Date */}
+        <div className="md:col-span-2">
+          <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+            Expiry Date *
+          </label>
+          <input
+            type="date"
+            name="expiryDate"
+            value={formData.expiryDate}
+            onChange={handleChange}
+            required
+            className="w-full rounded-xl bg-slate-50 border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:bg-white"
+          />
+        </div>
+      </div>
+
+      {/* Margin Indicator Preview */}
+      {margin !== null && (
+        <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-between text-xs text-emerald-800 font-semibold">
+          <span>Profit Margin Estimate:</span>
+          <span className="font-extrabold text-sm">{margin}% Markup</span>
+        </div>
+      )}
+
+      {/* Form Buttons */}
+      <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2.5 rounded-xl border border-slate-300 font-semibold text-xs text-slate-700 hover:bg-slate-100 transition"
+          >
+            Cancel
+          </button>
+        )}
+        <button
+          type="submit"
+          disabled={loading}
+          className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-sky-600 to-indigo-600 font-bold text-xs text-white shadow-md shadow-sky-500/20 hover:from-sky-500 hover:to-indigo-500 transition disabled:opacity-60"
+        >
+          <FaCheck />
+          <span>{loading ? "Saving SKU..." : "Save Medicine SKU"}</span>
+        </button>
+      </div>
     </form>
   );
 };
