@@ -151,29 +151,35 @@ const Medicine = () => {
     return Array.from(map.values());
   };
 
+  const [isDemoMode, setIsDemoMode] = useState(false);
+
   const loadDemoMedicines = () => {
     applyMedicines(demoMedicines);
-    toast.success("Demo products loaded successfully");
+    setIsDemoMode(true);
+    toast.success("Loaded demo products for testing");
   };
 
   const fetchMedicines = async () => {
     try {
       setLoading(true);
       const response = await getMedicines();
-      const medicineList = response.data || [];
+      const medicineList = Array.isArray(response)
+        ? response
+        : Array.isArray(response?.data)
+        ? response.data
+        : [];
 
-      if (medicineList.length === 0) {
-        applyMedicines(demoMedicines);
-        toast("No products found, showing demo products", {
-          icon: "🧪",
-        });
-      } else {
+      if (medicineList.length > 0) {
         applyMedicines(medicineList);
+        setIsDemoMode(false);
+      } else {
+        applyMedicines(demoMedicines);
+        setIsDemoMode(true);
       }
     } catch (error) {
       console.error(error);
       applyMedicines(demoMedicines);
-      toast.error("Showing demo products because the database is empty");
+      setIsDemoMode(true);
     } finally {
       setLoading(false);
     }
@@ -289,11 +295,25 @@ const Medicine = () => {
 
       {/* Filter Control Bar */}
       <div className="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-sm space-y-5 font-sans">
-        <div className="rounded-2xl border border-sky-100 bg-sky-50 p-3 text-sm text-sky-800">
-          <span className="font-extrabold">Bulk upload ready:</span> download
-          the Excel template, add your 5000+ products, and import them in one
-          click.
-        </div>
+        {isDemoMode ? (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 flex items-center justify-between">
+            <div>
+              <span className="font-extrabold text-amber-800">🧪 Demo Mode Active:</span> Showing demo test products. Add your real medicines or click sync to load from MongoDB.
+            </div>
+            <button
+              onClick={fetchMedicines}
+              className="px-3.5 py-1.5 bg-amber-600 text-white rounded-xl text-xs font-bold hover:bg-amber-700 cursor-pointer"
+            >
+              Sync DB Medicines
+            </button>
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900 flex items-center justify-between">
+            <div>
+              <span className="font-extrabold text-emerald-800">🟢 Live Database Connected:</span> Showing {medicines.length} real medicine product(s) directly from your MongoDB database.
+            </div>
+          </div>
+        )}
 
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           {/* Search Box */}
@@ -345,13 +365,25 @@ const Medicine = () => {
               <span>{importing ? "Importing..." : "Import Excel"}</span>
             </button>
 
-            <button
-              onClick={loadDemoMedicines}
-              className="flex items-center gap-2.5 px-5 py-3 rounded-2xl border border-violet-200 bg-violet-50 text-violet-700 font-extrabold text-sm shadow-sm transition active:scale-95 cursor-pointer"
-            >
-              <FaBoxes />
-              <span>Load Demo Products</span>
-            </button>
+            {isDemoMode ? (
+              <button
+                onClick={fetchMedicines}
+                className="flex items-center gap-2.5 px-5 py-3 rounded-2xl border border-emerald-200 bg-emerald-50 text-emerald-700 font-extrabold text-sm shadow-sm transition active:scale-95 cursor-pointer"
+                title="Fetch real medicines directly from your MongoDB database"
+              >
+                <FaCheckCircle className="text-emerald-600" />
+                <span>Show Real DB Medicines</span>
+              </button>
+            ) : (
+              <button
+                onClick={loadDemoMedicines}
+                className="flex items-center gap-2.5 px-4 py-3 rounded-2xl border border-slate-200 bg-slate-50 text-slate-600 font-bold text-sm shadow-sm transition active:scale-95 cursor-pointer hover:bg-slate-100"
+                title="Switch to demo test products"
+              >
+                <FaBoxes />
+                <span>Load Demo Products</span>
+              </button>
+            )}
 
             <button
               onClick={() => setShowAddDrawer(true)}

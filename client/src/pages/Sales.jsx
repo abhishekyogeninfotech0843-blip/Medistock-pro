@@ -73,7 +73,11 @@ const Sales = () => {
         ]);
 
         setSales(invoicesResponse?.data || []);
-        const loadedMedicines = medicinesResponse?.data || [];
+        const loadedMedicines = Array.isArray(medicinesResponse)
+          ? medicinesResponse
+          : Array.isArray(medicinesResponse?.data)
+          ? medicinesResponse.data
+          : [];
         setMedicines(loadedMedicines.length > 0 ? loadedMedicines : demoMedicines);
       } catch (error) {
         console.error(error);
