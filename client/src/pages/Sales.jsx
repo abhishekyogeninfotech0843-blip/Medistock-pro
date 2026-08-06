@@ -6,7 +6,9 @@ import {
   FaReceipt,
   FaPrint,
   FaSearch,
+  FaChevronDown,
 } from "react-icons/fa";
+import { demoMedicines } from "../utils/demoMedicines";
 
 const getLocalDateString = () => {
   const now = new Date();
@@ -37,6 +39,7 @@ import { getMedicines } from "../services/medicineService";
 const Sales = () => {
   const [sales, setSales] = useState([]);
   const [medicines, setMedicines] = useState([]);
+  const [activeDropdownIndex, setActiveDropdownIndex] = useState(null);
   const [search, setSearch] = useState("");
   const [selectedDate, setSelectedDate] = useState(getLocalDateString());
   const [paymentFilter, setPaymentFilter] = useState("ALL");
@@ -70,10 +73,12 @@ const Sales = () => {
         ]);
 
         setSales(invoicesResponse?.data || []);
-        setMedicines(medicinesResponse?.data || []);
+        const loadedMedicines = medicinesResponse?.data || [];
+        setMedicines(loadedMedicines.length > 0 ? loadedMedicines : demoMedicines);
       } catch (error) {
         console.error(error);
         toast.error("Failed to load sales data");
+        setMedicines(demoMedicines);
       } finally {
         setLoading(false);
       }
@@ -154,8 +159,9 @@ const Sales = () => {
         gst: "",
       });
 
-      const updatedMedicines = await getMedicines();
-      setMedicines(updatedMedicines?.data || []);
+      const updatedMedicines = await getMedicines().catch(() => ({ data: [] }));
+      const loadedMedicines = updatedMedicines?.data || [];
+      setMedicines(loadedMedicines.length > 0 ? loadedMedicines : demoMedicines);
     } catch (error) {
       console.error(error);
       toast.error(error.response?.data?.message || "Sale failed");
@@ -483,31 +489,55 @@ const Sales = () => {
                       <label className="block text-sm font-bold text-slate-800 mb-1.5">
                         Medicine
                       </label>
-                      <input
-                        type="text"
-                        placeholder="Search medicine..."
-                        value={item.search || ""}
-                        onChange={(e) => {
-                          const updatedItems = [...form.items];
-                          updatedItems[index].search = e.target.value;
-                          updatedItems[index].medicine = "";
-                          setForm({ ...form, items: updatedItems });
-                        }}
-                        className="w-full h-12 rounded-2xl bg-slate-50 border-2 border-slate-200 px-4 text-base outline-none focus:border-blue-500"
-                      />
-                      {item.search && !item.medicine && (
-                        <div className="absolute left-0 right-0 z-20 mt-1 max-h-48 overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-lg">
-                          {medicines
-                            .filter((medicine) =>
-                              (medicine.name || "")
-                                .toLowerCase()
-                                .includes(item.search.toLowerCase()),
-                            )
-                            .slice(0, 8)
-                            .map((medicine) => (
+                      <div className="relative">
+                        <input
+                          type="text"
+                          placeholder="Search medicine..."
+                          value={item.search || ""}
+                          onFocus={() => setActiveDropdownIndex(index)}
+                          onClick={() => setActiveDropdownIndex(index)}
+                          onBlur={() => setTimeout(() => setActiveDropdownIndex(null), 200)}
+                          onChange={(e) => {
+                            const updatedItems = [...form.items];
+                            updatedItems[index].search = e.target.value;
+                            updatedItems[index].medicine = "";
+                            setForm({ ...form, items: updatedItems });
+                            setActiveDropdownIndex(index);
+                          }}
+                          className="w-full h-12 rounded-2xl bg-slate-50 border-2 border-slate-200 pl-4 pr-10 text-base outline-none focus:border-blue-500 font-medium text-slate-800"
+                        />
+                        <FaChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none" />
+                      </div>
+
+                      {activeDropdownIndex === index && (
+                        <div className="absolute left-0 right-0 z-30 mt-1 max-h-56 overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-xl py-1">
+                          {(() => {
+                            const searchInput = (item.search || "").trim().toLowerCase();
+                            const selectedMed = medicines.find((m) => m._id === item.medicine);
+                            const isMatchedSelection = selectedMed && selectedMed.name.toLowerCase() === searchInput;
+
+                            const filtered = (!searchInput || isMatchedSelection)
+                              ? medicines
+                              : medicines.filter(
+                                  (m) =>
+                                    (m.name || "").toLowerCase().includes(searchInput) ||
+                                    (m.category || "").toLowerCase().includes(searchInput) ||
+                                    (m.company || "").toLowerCase().includes(searchInput)
+                                );
+
+                            if (filtered.length === 0) {
+                              return (
+                                <div className="px-4 py-3 text-sm text-slate-500 font-medium text-center">
+                                  No matching medicine found.
+                                </div>
+                              );
+                            }
+
+                            return filtered.slice(0, 15).map((medicine) => (
                               <button
                                 type="button"
                                 key={medicine._id}
+                                onMouseDown={(e) => e.preventDefault()}
                                 onClick={() => {
                                   const updatedItems = [...form.items];
                                   updatedItems[index].medicine = medicine._id;
@@ -515,21 +545,32 @@ const Sales = () => {
                                   updatedItems[index].unitType =
                                     categoryToUnitType(medicine.category);
                                   setForm({ ...form, items: updatedItems });
+                                  setActiveDropdownIndex(null);
                                 }}
-                                className="w-full text-left px-4 py-3 text-sm text-slate-700 hover:bg-slate-100"
+                                className="w-full text-left px-4 py-2.5 text-sm hover:bg-blue-50/80 transition flex items-center justify-between group border-b border-slate-50 last:border-0"
                               >
-                                {medicine.name} — Stock: {medicine.stock}
+                                <div>
+                                  <span className="font-semibold text-slate-800 group-hover:text-blue-600 block">
+                                    {medicine.name}
+                                  </span>
+                                  <span className="text-xs text-slate-400">
+                                    {medicine.category || "General"} {medicine.company ? `• ${medicine.company}` : ""}
+                                  </span>
+                                </div>
+                                <div className="text-right">
+                                  <span
+                                    className={`text-xs font-bold px-2.5 py-0.5 rounded-full ${
+                                      medicine.stock > 10
+                                        ? "bg-emerald-100 text-emerald-700"
+                                        : "bg-amber-100 text-amber-700"
+                                    }`}
+                                  >
+                                    Stock: {medicine.stock}
+                                  </span>
+                                </div>
                               </button>
-                            ))}
-                          {medicines.filter((medicine) =>
-                            (medicine.name || "")
-                              .toLowerCase()
-                              .includes(item.search.toLowerCase()),
-                          ).length === 0 && (
-                            <div className="px-4 py-3 text-sm text-slate-500">
-                              No matching medicine found.
-                            </div>
-                          )}
+                            ));
+                          })()}
                         </div>
                       )}
                     </div>
