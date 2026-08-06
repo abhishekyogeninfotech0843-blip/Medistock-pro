@@ -7,6 +7,7 @@ const protect = require("../middleware/authMiddleware");
 const {
   createInvoice,
   getInvoices,
+  updatePayment,
   downloadInvoicePDF,
   searchInvoices,
 } = require("../controllers/invoiceController");
@@ -31,5 +32,10 @@ router.get("/search", protect, searchInvoices);
 // Download Invoice PDF
 // ==========================
 router.get("/pdf/:id", protect, downloadInvoicePDF);
+
+// ==========================
+// Update Invoice Payment
+// ==========================
+router.patch("/:id/payment", protect, updatePayment);
 
 module.exports = router;

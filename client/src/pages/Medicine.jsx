@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import toast, { Toaster } from "react-hot-toast";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -14,6 +14,7 @@ import {
   FaCalendarTimes,
   FaCheckCircle,
   FaBoxes,
+  FaDownload,
   FaTag,
   FaTimes,
   FaExclamationCircle,
@@ -21,7 +22,69 @@ import {
 import AppLayout from "../layouts/AppLayout";
 import MedicineForm from "../components/MedicineForm";
 import EditMedicineModal from "../components/EditMedicineModal";
-import { getMedicines, deleteMedicine } from "../services/medicineService";
+import {
+  getMedicines,
+  deleteMedicine,
+  importMedicines,
+} from "../services/medicineService";
+
+const demoMedicines = Array.from({ length: 120 }, (_, index) => {
+  const categories = [
+    "Tablets",
+    "Syrup",
+    "Antibiotics",
+    "Supplements",
+    "Injections",
+  ];
+  const companies = [
+    "ABC Pharma",
+    "XYZ Labs",
+    "MediCare",
+    "Wellness Pharma",
+    "Nova Health",
+  ];
+  const medicineImages = [
+    "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?auto=format&fit=crop&w=900&q=80",
+    "https://images.unsplash.com/photo-1576091160550-2173dba999ef?auto=format&fit=crop&w=900&q=80",
+    "https://images.unsplash.com/photo-1607613009820-a29f7bb81c04?auto=format&fit=crop&w=900&q=80",
+    "https://images.unsplash.com/photo-1628771065518-0d82f1938462?auto=format&fit=crop&w=900&q=80",
+  ];
+  const names = [
+    "Paracetamol 500mg",
+    "Amoxicillin 250mg",
+    "Cough Syrup 100ml",
+    "Vitamin D3 Capsules",
+    "Metformin 500mg",
+    "Azithromycin 250mg",
+    "Omeprazole 20mg",
+    "Calcium Tablets",
+    "Salbutamol Inhaler",
+    "Ibuprofen 400mg",
+  ];
+
+  const category = categories[index % categories.length];
+  const company = companies[index % companies.length];
+  const name = `${names[index % names.length]} ${index + 1}`;
+  const stock = (index % 10) * 40 + 50;
+  const purchasePrice = 8 + (index % 7) * 3;
+  const sellingPrice = purchasePrice + 4 + (index % 5);
+
+  return {
+    _id: `demo-${index + 1}`,
+    name,
+    company,
+    category,
+    image: medicineImages[index % medicineImages.length],
+    batchNo: `BATCH-${String(index + 1).padStart(3, "0")}`,
+    purchasePrice,
+    sellingPrice,
+    stock,
+    minimumStock: 20 + (index % 4) * 10,
+    expiryDate: new Date(Date.now() + (index % 12) * 30 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10),
+  };
+});
 
 const Medicine = () => {
   const [medicines, setMedicines] = useState([]);
@@ -30,19 +93,26 @@ const Medicine = () => {
   const [selectedCategory, setSelectedCategory] = useState("ALL");
   const [stockFilter, setStockFilter] = useState("ALL");
   const [viewMode, setViewMode] = useState("table");
+  const [groupByName, setGroupByName] = useState(true);
+  const [selectedCompany, setSelectedCompany] = useState("ALL");
   const [loading, setLoading] = useState(true);
 
   const [showAddDrawer, setShowAddDrawer] = useState(false);
   const [selectedMedicine, setSelectedMedicine] = useState(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [importing, setImporting] = useState(false);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     fetchMedicines();
   }, []);
 
   useEffect(() => {
-    let result = [...medicines];
+    const displaySource = groupByName
+      ? aggregateMedicines(medicines)
+      : medicines;
+    let result = [...displaySource];
 
     if (search.trim()) {
       const q = search.toLowerCase();
@@ -51,12 +121,16 @@ const Medicine = () => {
           m.name?.toLowerCase().includes(q) ||
           m.company?.toLowerCase().includes(q) ||
           m.category?.toLowerCase().includes(q) ||
-          m.batchNo?.toLowerCase().includes(q)
+          m.batchNo?.toLowerCase().includes(q),
       );
     }
 
     if (selectedCategory !== "ALL") {
       result = result.filter((m) => m.category === selectedCategory);
+    }
+
+    if (selectedCompany !== "ALL") {
+      result = result.filter((m) => m.company === selectedCompany);
     }
 
     if (stockFilter === "LOW") {
@@ -66,31 +140,133 @@ const Medicine = () => {
     } else if (stockFilter === "EXPIRED") {
       const today = new Date();
       result = result.filter(
-        (m) => m.expiryDate && new Date(m.expiryDate) < today
+        (m) => m.expiryDate && new Date(m.expiryDate) < today,
       );
     }
 
-    setFilteredMedicines(result);
-  }, [search, selectedCategory, stockFilter, medicines]);
+    setFilteredMedicines(sortByName(result));
+  }, [
+    search,
+    selectedCategory,
+    stockFilter,
+    medicines,
+    groupByName,
+    selectedCompany,
+  ]);
+
+  const sortByName = (list) =>
+    [...list].sort((a, b) =>
+      String(a.name || "").localeCompare(String(b.name || ""), undefined, {
+        sensitivity: "base",
+      }),
+    );
+
+  const applyMedicines = (medicineList) => {
+    const sorted = sortByName(medicineList);
+    setMedicines(sorted);
+    setFilteredMedicines(sorted);
+  };
+
+  // Aggregate medicines by name (case-insensitive) and sum stock
+  const aggregateMedicines = (list) => {
+    if (!Array.isArray(list)) return [];
+
+    const map = new Map();
+
+    list.forEach((m) => {
+      const key = (m.name || "").trim().toLowerCase();
+
+      if (!key) return;
+
+      if (!map.has(key)) {
+        map.set(key, {
+          _id: `group-${key}`,
+          name: m.name,
+          company: m.company,
+          category: m.category,
+          image: m.image,
+          batchNo: "Multiple",
+          purchasePrice: m.purchasePrice,
+          sellingPrice: m.sellingPrice,
+          stock: Number(m.stock) || 0,
+          minimumStock: m.minimumStock || 10,
+          expiryDate: m.expiryDate,
+          skuCount: 1,
+          originals: [m._id],
+        });
+      } else {
+        const cur = map.get(key);
+        cur.stock += Number(m.stock) || 0;
+        cur.skuCount += 1;
+        cur.minimumStock = Math.min(
+          cur.minimumStock || 10,
+          m.minimumStock || 10,
+        );
+        // choose earliest expiry
+        if (m.expiryDate && new Date(m.expiryDate) < new Date(cur.expiryDate)) {
+          cur.expiryDate = m.expiryDate;
+        }
+        cur.originals.push(m._id);
+      }
+    });
+
+    return Array.from(map.values());
+  };
+
+  const loadDemoMedicines = () => {
+    applyMedicines(demoMedicines);
+    toast.success("Demo products loaded successfully");
+  };
 
   const fetchMedicines = async () => {
     try {
       setLoading(true);
       const response = await getMedicines();
       const medicineList = response.data || [];
-      setMedicines(medicineList);
-      setFilteredMedicines(medicineList);
+
+      if (medicineList.length === 0) {
+        applyMedicines(demoMedicines);
+        toast("No products found, showing demo products", {
+          icon: "🧪",
+        });
+      } else {
+        applyMedicines(medicineList);
+      }
     } catch (error) {
       console.error(error);
-      toast.error("Failed to load medicine database");
+      applyMedicines(demoMedicines);
+      toast.error("Showing demo products because the database is empty");
     } finally {
       setLoading(false);
     }
   };
 
+  const displaySourceForCategories = groupByName
+    ? aggregateMedicines(medicines)
+    : medicines;
+
   const categories = [
     "ALL",
-    ...Array.from(new Set(medicines.map((m) => m.category).filter(Boolean))),
+    ...Array.from(
+      new Set(
+        displaySourceForCategories.map((m) => m.category).filter(Boolean),
+      ),
+    ),
+  ];
+
+  const companies = [
+    "ALL",
+    ...Array.from(
+      new Set(
+        // If a category is selected, only show companies present in that category
+        displaySourceForCategories
+          .filter((m) =>
+            selectedCategory === "ALL" ? true : m.category === selectedCategory,
+          )
+          .map((m) => m.company)
+          .filter(Boolean),
+      ),
+    ),
   ];
 
   const confirmDelete = (med) => {
@@ -113,6 +289,37 @@ const Medicine = () => {
   const handleEdit = (medicine) => {
     setSelectedMedicine(medicine);
     setShowEditModal(true);
+  };
+
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleExcelImport = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const isValidType = /\.(xlsx|xls)$/i.test(file.name);
+    if (!isValidType) {
+      toast.error("Please choose a valid Excel file (.xlsx or .xls)");
+      event.target.value = "";
+      return;
+    }
+
+    try {
+      setImporting(true);
+      const response = await importMedicines(file);
+      toast.success(`${response?.total || 0} medicines imported successfully`);
+      await fetchMedicines();
+    } catch (error) {
+      console.error(error);
+      toast.error(
+        error.response?.data?.message || "Failed to import medicines",
+      );
+    } finally {
+      setImporting(false);
+      event.target.value = "";
+    }
   };
 
   return (
@@ -144,6 +351,12 @@ const Medicine = () => {
 
       {/* Filter Control Bar */}
       <div className="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-sm space-y-5 font-sans">
+        <div className="rounded-2xl border border-sky-100 bg-sky-50 p-3 text-sm text-sky-800">
+          <span className="font-extrabold">Bulk upload ready:</span> download
+          the Excel template, add your 5000+ products, and import them in one
+          click.
+        </div>
+
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           {/* Search Box */}
           <div className="relative flex-1">
@@ -167,6 +380,41 @@ const Medicine = () => {
 
           {/* Action buttons */}
           <div className="flex items-center gap-3">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={handleExcelImport}
+              className="hidden"
+            />
+
+            <button
+              onClick={() =>
+                window.open("/medicine-import-template.xlsx", "_blank")
+              }
+              className="flex items-center gap-2.5 px-5 py-3 rounded-2xl border border-sky-200 bg-sky-50 text-sky-700 font-extrabold text-sm shadow-sm transition active:scale-95 cursor-pointer"
+            >
+              <FaDownload />
+              <span>Download Template</span>
+            </button>
+
+            <button
+              onClick={handleImportClick}
+              disabled={importing}
+              className="flex items-center gap-2.5 px-5 py-3 rounded-2xl border border-emerald-200 bg-emerald-50 text-emerald-700 font-extrabold text-sm shadow-sm transition active:scale-95 cursor-pointer disabled:opacity-60"
+            >
+              <FaBoxes />
+              <span>{importing ? "Importing..." : "Import Excel"}</span>
+            </button>
+
+            <button
+              onClick={loadDemoMedicines}
+              className="flex items-center gap-2.5 px-5 py-3 rounded-2xl border border-violet-200 bg-violet-50 text-violet-700 font-extrabold text-sm shadow-sm transition active:scale-95 cursor-pointer"
+            >
+              <FaBoxes />
+              <span>Load Demo Products</span>
+            </button>
+
             <button
               onClick={() => setShowAddDrawer(true)}
               className="flex items-center gap-2.5 px-5 py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-sm shadow-md shadow-blue-600/25 transition active:scale-95 cursor-pointer"
@@ -200,6 +448,17 @@ const Medicine = () => {
                 <FaThLarge className="text-base" />
               </button>
             </div>
+            <button
+              onClick={() => setGroupByName((s) => !s)}
+              className={`ml-3 px-3.5 py-2 rounded-xl text-sm font-bold transition cursor-pointer ${
+                groupByName
+                  ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                  : "bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100"
+              }`}
+              title="Toggle consolidated view (group similar products)"
+            >
+              {groupByName ? "Consolidated: ON" : "Consolidated: OFF"}
+            </button>
           </div>
         </div>
 
@@ -222,10 +481,31 @@ const Medicine = () => {
                 {cat}
               </button>
             ))}
+            {/* Company Pills */}
+            <div className="ml-3 flex items-center gap-2">
+              <span className="flex items-center gap-1.5 text-slate-400 font-extrabold uppercase text-xs">
+                Company:
+              </span>
+              {companies.slice(0, 7).map((comp) => (
+                <button
+                  key={comp}
+                  onClick={() => setSelectedCompany(comp)}
+                  className={`px-3.5 py-1.5 rounded-xl border transition cursor-pointer ${
+                    selectedCompany === comp
+                      ? "bg-emerald-50 text-emerald-700 border-emerald-200 font-extrabold"
+                      : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                  }`}
+                >
+                  {comp}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="text-slate-400 font-extrabold uppercase text-xs">Status:</span>
+            <span className="text-slate-400 font-extrabold uppercase text-xs">
+              Status:
+            </span>
             {[
               { id: "ALL", label: "All SKUs" },
               { id: "HEALTHY", label: "In Stock" },
@@ -246,7 +526,8 @@ const Medicine = () => {
             ))}
 
             <span className="ml-2 px-3 py-1.5 rounded-full bg-slate-100 text-slate-800 font-extrabold">
-              {filteredMedicines.length} SKUs Listed
+              {filteredMedicines.length} {groupByName ? "Products" : "SKUs"}{" "}
+              Listed
             </span>
           </div>
         </div>
@@ -256,7 +537,9 @@ const Medicine = () => {
       {loading ? (
         <div className="bg-white p-16 rounded-3xl border border-slate-200/90 text-center">
           <div className="h-12 w-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-base text-slate-600 font-bold">Loading medicine inventory database...</p>
+          <p className="text-base text-slate-600 font-bold">
+            Loading medicine inventory database...
+          </p>
         </div>
       ) : viewMode === "table" ? (
         /* TABLE VIEW */
@@ -279,18 +562,33 @@ const Medicine = () => {
                 {filteredMedicines.length > 0 ? (
                   filteredMedicines.map((med) => {
                     const isLow = med.stock <= (med.minimumStock || 10);
-                    const isExp = med.expiryDate && new Date(med.expiryDate) < new Date();
+                    const isExp =
+                      med.expiryDate && new Date(med.expiryDate) < new Date();
 
                     return (
-                      <tr key={med._id} className="hover:bg-slate-50/80 transition-colors">
+                      <tr
+                        key={med._id}
+                        className="hover:bg-slate-50/80 transition-colors"
+                      >
                         <td className="px-6 py-5 font-bold text-slate-900">
                           <div className="flex items-center gap-3.5">
-                            <div className="h-10 w-10 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center text-lg font-bold shadow-xs">
-                              <FaPills />
-                            </div>
+                            <img
+                              src={med.image || "/medicine-placeholder.svg"}
+                              alt={med.name}
+                              loading="lazy"
+                              onError={(e) => {
+                                e.currentTarget.src =
+                                  "/medicine-placeholder.svg";
+                              }}
+                              className="h-12 w-12 rounded-2xl object-cover border border-slate-200 shadow-sm"
+                            />
                             <div>
-                              <span className="block font-extrabold text-slate-900 leading-tight text-base">{med.name}</span>
-                              <span className="block text-xs text-slate-400 font-mono mt-0.5">ID: {med._id?.slice(-6)}</span>
+                              <span className="block font-extrabold text-slate-900 leading-tight text-base">
+                                {med.name}
+                              </span>
+                              <span className="block text-xs text-slate-400 font-mono mt-0.5">
+                                ID: {med._id?.slice(-6)}
+                              </span>
                             </div>
                           </div>
                         </td>
@@ -302,7 +600,9 @@ const Medicine = () => {
                           </span>
                         </td>
 
-                        <td className="px-5 py-5 text-slate-700 font-semibold text-sm">{med.company}</td>
+                        <td className="px-5 py-5 text-slate-700 font-semibold text-sm">
+                          {med.company}
+                        </td>
 
                         <td className="px-5 py-5 text-slate-700 font-mono text-sm font-bold">
                           {med.batchNo || "N/A"}
@@ -310,11 +610,19 @@ const Medicine = () => {
 
                         <td className="px-5 py-5">
                           <div className="text-sm">
-                            <span className="text-slate-400 font-normal">Buy: </span>
-                            <span className="font-bold text-slate-800">₹{med.purchasePrice}</span>
+                            <span className="text-slate-400 font-normal">
+                              Buy:{" "}
+                            </span>
+                            <span className="font-bold text-slate-800">
+                              ₹{med.purchasePrice}
+                            </span>
                             <span className="mx-2 text-slate-300">|</span>
-                            <span className="text-slate-400 font-normal">Sell: </span>
-                            <span className="font-extrabold text-emerald-600">₹{med.sellingPrice}</span>
+                            <span className="text-slate-400 font-normal">
+                              Sell:{" "}
+                            </span>
+                            <span className="font-extrabold text-emerald-600">
+                              ₹{med.sellingPrice}
+                            </span>
                           </div>
                         </td>
 
@@ -336,30 +644,48 @@ const Medicine = () => {
 
                         <td className="px-5 py-5 text-sm font-semibold text-slate-700">
                           {med.expiryDate
-                            ? new Date(med.expiryDate).toLocaleDateString("en-US", {
-                                month: "short",
-                                day: "numeric",
-                                year: "numeric",
-                              })
+                            ? new Date(med.expiryDate).toLocaleDateString(
+                                "en-US",
+                                {
+                                  month: "short",
+                                  day: "numeric",
+                                  year: "numeric",
+                                },
+                              )
                             : "N/A"}
                         </td>
 
                         <td className="px-6 py-5 text-right">
                           <div className="flex items-center justify-end gap-2">
-                            <button
-                              onClick={() => handleEdit(med)}
-                              className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs transition shadow-sm flex items-center gap-1.5 cursor-pointer"
-                            >
-                              <FaEdit />
-                              <span>Edit</span>
-                            </button>
-                            <button
-                              onClick={() => confirmDelete(med)}
-                              className="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs transition shadow-sm flex items-center gap-1.5 cursor-pointer"
-                            >
-                              <FaTrash />
-                              <span>Delete</span>
-                            </button>
+                            {!groupByName ? (
+                              <>
+                                <button
+                                  onClick={() => handleEdit(med)}
+                                  className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs transition shadow-sm flex items-center gap-1.5 cursor-pointer"
+                                >
+                                  <FaEdit />
+                                  <span>Edit</span>
+                                </button>
+                                <button
+                                  onClick={() => confirmDelete(med)}
+                                  className="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs transition shadow-sm flex items-center gap-1.5 cursor-pointer"
+                                >
+                                  <FaTrash />
+                                  <span>Delete</span>
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                onClick={() => {
+                                  setGroupByName(false);
+                                  setSearch(med.name);
+                                }}
+                                className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition shadow-sm flex items-center gap-1.5 cursor-pointer"
+                              >
+                                <FaBoxes />
+                                <span>View SKUs ({med.skuCount})</span>
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -367,7 +693,10 @@ const Medicine = () => {
                   })
                 ) : (
                   <tr>
-                    <td colSpan="8" className="px-6 py-16 text-center text-slate-400 font-medium">
+                    <td
+                      colSpan="8"
+                      className="px-6 py-16 text-center text-slate-400 font-medium"
+                    >
                       <FaPills className="mx-auto text-5xl text-slate-300 mb-3" />
                       No medicines matched your current search filters.
                     </td>
@@ -392,20 +721,44 @@ const Medicine = () => {
                     <span className="px-3 py-1 rounded-xl bg-slate-100 text-slate-800 font-bold text-xs">
                       {med.category}
                     </span>
-                    <span className="text-xs font-mono font-bold text-slate-400">{med.batchNo}</span>
+                    <span className="text-xs font-mono font-bold text-slate-400">
+                      {med.batchNo}
+                    </span>
                   </div>
 
-                  <h3 className="text-xl font-extrabold text-slate-900">{med.name}</h3>
-                  <p className="text-sm font-semibold text-slate-500 mt-0.5">{med.company}</p>
+                  <img
+                    src={med.image || "/medicine-placeholder.svg"}
+                    alt={med.name}
+                    loading="lazy"
+                    onError={(e) => {
+                      e.currentTarget.src = "/medicine-placeholder.svg";
+                    }}
+                    className="h-28 w-full rounded-2xl object-cover border border-slate-200 mb-4"
+                  />
+
+                  <h3 className="text-xl font-extrabold text-slate-900">
+                    {med.name}
+                  </h3>
+                  <p className="text-sm font-semibold text-slate-500 mt-0.5">
+                    {med.company}
+                  </p>
 
                   <div className="mt-5 pt-4 border-t border-slate-100 grid grid-cols-2 gap-3 text-sm">
                     <div>
-                      <span className="text-slate-400 text-xs font-bold uppercase">Selling Price</span>
-                      <p className="font-black text-emerald-600 text-lg">₹{med.sellingPrice}</p>
+                      <span className="text-slate-400 text-xs font-bold uppercase">
+                        Selling Price
+                      </span>
+                      <p className="font-black text-emerald-600 text-lg">
+                        ₹{med.sellingPrice}
+                      </p>
                     </div>
                     <div>
-                      <span className="text-slate-400 text-xs font-bold uppercase">Stock Level</span>
-                      <p className={`font-black text-lg ${isLow ? "text-amber-600" : "text-slate-900"}`}>
+                      <span className="text-slate-400 text-xs font-bold uppercase">
+                        Stock Level
+                      </span>
+                      <p
+                        className={`font-black text-lg ${isLow ? "text-amber-600" : "text-slate-900"}`}
+                      >
                         {med.stock} Units
                       </p>
                     </div>
@@ -413,18 +766,32 @@ const Medicine = () => {
                 </div>
 
                 <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-end gap-2.5">
-                  <button
-                    onClick={() => handleEdit(med)}
-                    className="px-4 py-2 rounded-xl bg-amber-50 text-amber-800 border border-amber-200 font-bold text-xs hover:bg-amber-100 transition cursor-pointer"
-                  >
-                    Edit SKU
-                  </button>
-                  <button
-                    onClick={() => confirmDelete(med)}
-                    className="px-4 py-2 rounded-xl bg-rose-50 text-rose-800 border border-rose-200 font-bold text-xs hover:bg-rose-100 transition cursor-pointer"
-                  >
-                    Delete
-                  </button>
+                  {!groupByName ? (
+                    <>
+                      <button
+                        onClick={() => handleEdit(med)}
+                        className="px-4 py-2 rounded-xl bg-amber-50 text-amber-800 border border-amber-200 font-bold text-xs hover:bg-amber-100 transition cursor-pointer"
+                      >
+                        Edit SKU
+                      </button>
+                      <button
+                        onClick={() => confirmDelete(med)}
+                        className="px-4 py-2 rounded-xl bg-rose-50 text-rose-800 border border-rose-200 font-bold text-xs hover:bg-rose-100 transition cursor-pointer"
+                      >
+                        Delete
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setGroupByName(false);
+                        setSearch(med.name);
+                      }}
+                      className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white border border-blue-700 font-bold text-xs transition cursor-pointer"
+                    >
+                      View SKUs ({med.skuCount})
+                    </button>
+                  )}
                 </div>
               </div>
             );
@@ -456,9 +823,13 @@ const Medicine = () => {
               <FaExclamationCircle />
             </div>
             <div>
-              <h3 className="text-2xl font-extrabold text-slate-900">Delete Medicine SKU?</h3>
+              <h3 className="text-2xl font-extrabold text-slate-900">
+                Delete Medicine SKU?
+              </h3>
               <p className="text-sm text-slate-600 mt-2 font-medium">
-                Are you sure you want to permanently delete <strong>"{deleteTarget.name}"</strong>? This action cannot be undone.
+                Are you sure you want to permanently delete{" "}
+                <strong>"{deleteTarget.name}"</strong>? This action cannot be
+                undone.
               </p>
             </div>
 

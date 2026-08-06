@@ -2,13 +2,34 @@ import React from "react";
 import { motion } from "framer-motion";
 import { FaArrowUp, FaArrowDown } from "react-icons/fa";
 
-const DashboardCard = ({ title, value, color, icon, trend, trendValue, subtitle }) => {
+const DashboardCard = ({
+  title,
+  value,
+  color,
+  icon,
+  trend,
+  trendValue,
+  subtitle,
+  onClick,
+}) => {
   const isPositive = trend === "up";
 
   return (
     <motion.div
       whileHover={{ y: -4, transition: { duration: 0.2 } }}
-      className="relative overflow-hidden bg-white rounded-2xl p-6 border border-slate-200/90 shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col justify-between group font-sans"
+      onClick={onClick}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={
+        onClick
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") onClick();
+            }
+          : undefined
+      }
+      className={`relative overflow-hidden bg-white rounded-2xl p-6 border border-slate-200/90 shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col justify-between group font-sans ${
+        onClick ? "cursor-pointer" : ""
+      }`}
     >
       {/* Top Accent Bar */}
       <div
@@ -38,7 +59,11 @@ const DashboardCard = ({ title, value, color, icon, trend, trendValue, subtitle 
                   : "bg-rose-50 text-rose-700 border-rose-200"
               }`}
             >
-              {isPositive ? <FaArrowUp className="text-[10px]" /> : <FaArrowDown className="text-[10px]" />}
+              {isPositive ? (
+                <FaArrowUp className="text-[10px]" />
+              ) : (
+                <FaArrowDown className="text-[10px]" />
+              )}
               <span>{trendValue}</span>
             </div>
           )}

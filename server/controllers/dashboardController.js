@@ -42,7 +42,7 @@ const getDashboard = async (req, res) => {
 
     // Notifications
     const notifications = await Notification.countDocuments({
-      isRead: false,
+      read: false,
     });
 
     res.json({

@@ -3,12 +3,26 @@ const Invoice = require("../models/Invoice");
 const Medicine = require("../models/Medicine");
 const Counter = require("../models/Counter");
 
+const normalizePayment = (payment) => {
+  let paymentMethod = (payment || "").toString().trim();
+  if (!paymentMethod) {
+    return "UPI / GPay";
+  }
+  const p = paymentMethod.toLowerCase();
+  if (p.includes("cash")) return "Cash";
+  if (p.includes("card") || p.includes("debit") || p.includes("credit"))
+    return "Card";
+  if (p.includes("upi") || p.includes("gpay") || p.includes("qr"))
+    return "UPI / GPay";
+  return paymentMethod;
+};
+
 // ==========================
 // Create Invoice
 // ==========================
 const createInvoice = async (req, res) => {
   try {
-    const { customerName, items, discount, gst } = req.body;
+    const { customerName, items, discount, gst, payment } = req.body;
 
     // ==========================
     // Generate Invoice Number
@@ -39,15 +53,42 @@ const createInvoice = async (req, res) => {
         });
       }
 
-      if (medicine.stock < item.quantity) {
+      const validUnitTypes = [
+        "Tablet",
+        "Strip",
+        "Capsule",
+        "Injection",
+        "Ointment",
+        "Other",
+      ];
+      const packSize = Number(item.packSize || medicine.packSize || 10);
+      const displayQuantity = Number(
+        item.displayQuantity || item.quantity || 1,
+      );
+      const unitType = validUnitTypes.includes(item.unitType)
+        ? item.unitType
+        : "Tablet";
+      const actualQuantity =
+        unitType === "Strip" ? displayQuantity * packSize : displayQuantity;
+
+      if (medicine.stock < actualQuantity) {
         return res.status(400).json({
           success: false,
           message: `${medicine.name} has insufficient stock`,
         });
       }
 
-      item.sellingPrice = medicine.sellingPrice;
-      item.total = item.quantity * medicine.sellingPrice;
+      const unitPrice =
+        unitType === "Strip"
+          ? Number(medicine.sellingPrice)
+          : Number((medicine.sellingPrice / packSize).toFixed(2));
+
+      item.sellingPrice = unitPrice;
+      item.total = displayQuantity * unitPrice;
+      item.quantity = actualQuantity;
+      item.displayQuantity = displayQuantity;
+      item.unitType = unitType;
+      item.packSize = packSize;
 
       subTotal += item.total;
     }
@@ -71,6 +112,7 @@ const createInvoice = async (req, res) => {
     const invoice = await Invoice.create({
       customerName,
       invoiceNumber,
+      payment: payment || "UPI / GPay",
       items,
       subTotal,
       discount,
@@ -78,10 +120,15 @@ const createInvoice = async (req, res) => {
       grandTotal,
     });
 
+    const populatedInvoice = await Invoice.findById(invoice._id).populate(
+      "items.medicine",
+      "name company",
+    );
+
     res.status(201).json({
       success: true,
       message: "Invoice Created Successfully",
-      data: invoice,
+      data: populatedInvoice,
     });
   } catch (error) {
     res.status(500).json({
@@ -112,13 +159,57 @@ const getInvoices = async (req, res) => {
     });
   }
 };
+
+// ==========================
+// Update Invoice Payment
+// ==========================
+const updatePayment = async (req, res) => {
+  try {
+    const invoiceId = req.params.id;
+    const { payment } = req.body;
+
+    if (!invoiceId) {
+      return res.status(400).json({
+        success: false,
+        message: "Invoice id required",
+      });
+    }
+
+    const normalizedPayment = normalizePayment(payment);
+
+    const invoice = await Invoice.findByIdAndUpdate(
+      invoiceId,
+      { payment: normalizedPayment },
+      { new: true },
+    ).populate("items.medicine", "name company");
+
+    if (!invoice) {
+      return res.status(404).json({
+        success: false,
+        message: "Invoice not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: invoice,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
 // ==========================
 // Download Invoice PDF
 // ==========================
 const downloadInvoicePDF = async (req, res) => {
   try {
-    const invoice = await Invoice.findById(req.params.id)
-      .populate("items.medicine", "name company");
+    const invoice = await Invoice.findById(req.params.id).populate(
+      "items.medicine",
+      "name company",
+    );
 
     if (!invoice) {
       return res.status(404).json({
@@ -132,7 +223,7 @@ const downloadInvoicePDF = async (req, res) => {
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader(
       "Content-Disposition",
-      `attachment; filename=${invoice.invoiceNumber}.pdf`
+      `attachment; filename=${invoice.invoiceNumber}.pdf`,
     );
 
     doc.pipe(res);
@@ -140,53 +231,43 @@ const downloadInvoicePDF = async (req, res) => {
     // ==========================
     // Header
     // ==========================
-    doc
-      .fontSize(22)
-      .text("MEDISTOCK PRO", {
-        align: "center",
-      });
+    doc.fontSize(22).text("MEDISTOCK PRO", {
+      align: "center",
+    });
 
-    doc
-      .fontSize(12)
-      .text("Pharmacy Management System", {
-        align: "center",
-      });
+    doc.fontSize(12).text("Pharmacy Management System", {
+      align: "center",
+    });
 
     doc.moveDown();
 
     doc.text(`Invoice No : ${invoice.invoiceNumber}`);
     doc.text(`Customer   : ${invoice.customerName}`);
-    doc.text(
-      `Date       : ${invoice.invoiceDate.toDateString()}`
-    );
+    doc.text(`Date       : ${invoice.invoiceDate.toDateString()}`);
 
     doc.moveDown();
 
     // Table Header
-    doc.text("--------------------------------------------");
-
-    doc.text("Medicine        Qty      Price      Total");
-
-    doc.text("--------------------------------------------");
+    doc.font("Courier").fontSize(10);
+    doc.text("-------------------------------------------------------------");
+    doc.text("Medicine                      Qty    Price    Total");
+    doc.text("-------------------------------------------------------------");
 
     // Items
     invoice.items.forEach((item) => {
-      doc.text(
-        `${item.medicine.name}      ${item.quantity}      ₹${item.sellingPrice}      ₹${item.total}`
-      );
+      const line = `${item.medicine.name.padEnd(28, " ")} ${String(item.quantity).padStart(3, " ")}    ${String(item.sellingPrice).padStart(6, " ")}    ${String(item.total).padStart(6, " ")}`;
+      doc.text(line);
     });
 
     doc.moveDown();
 
-    doc.text("--------------------------------------------");
+    doc.text("-------------------------------------------------------------");
+    doc.text(`Subtotal  : Rs. ${invoice.subTotal}`);
+    doc.text(`Discount  : Rs. ${invoice.discount}`);
+    doc.text(`GST       : Rs. ${invoice.gst}`);
 
-    doc.text(`Subtotal : ₹${invoice.subTotal}`);
-    doc.text(`Discount : ₹${invoice.discount}`);
-    doc.text(`GST      : ₹${invoice.gst}`);
-
-    doc.fontSize(14).text(
-      `Grand Total : ₹${invoice.grandTotal}`
-    );
+    doc.fontSize(14).text(`Grand Total : Rs. ${invoice.grandTotal}`);
+    doc.fontSize(12);
 
     doc.moveDown();
 
@@ -195,7 +276,6 @@ const downloadInvoicePDF = async (req, res) => {
     });
 
     doc.end();
-
   } catch (error) {
     res.status(500).json({
       success: false,
@@ -230,7 +310,6 @@ const searchInvoices = async (req, res) => {
       ];
     }
 
-
     // Date Filter
     if (startDate && endDate) {
       filter.invoiceDate = {
@@ -239,26 +318,20 @@ const searchInvoices = async (req, res) => {
       };
     }
 
-
     const invoices = await Invoice.find(filter)
       .populate("items.medicine", "name company")
       .sort({ createdAt: -1 });
-
 
     res.status(200).json({
       success: true,
       total: invoices.length,
       data: invoices,
     });
-
-
   } catch (error) {
-
     res.status(500).json({
       success: false,
       message: error.message,
     });
-
   }
 };
 // ==========================
@@ -267,6 +340,7 @@ const searchInvoices = async (req, res) => {
 module.exports = {
   createInvoice,
   getInvoices,
+  updatePayment,
   downloadInvoicePDF,
   searchInvoices,
 };

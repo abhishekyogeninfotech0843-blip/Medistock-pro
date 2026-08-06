@@ -37,6 +37,12 @@ const medicineSchema = new mongoose.Schema(
       required: true,
     },
 
+    packSize: {
+      type: Number,
+      default: 10,
+      required: true,
+    },
+
     stock: {
       type: Number,
       default: 0,

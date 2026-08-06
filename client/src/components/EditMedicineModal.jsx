@@ -14,6 +14,7 @@ const EditMedicineModal = ({ onClose, medicine, onSuccess }) => {
     stock: "",
     minimumStock: "",
     expiryDate: "",
+    packSize: "",
   });
 
   const [loading, setLoading] = useState(false);
@@ -29,6 +30,7 @@ const EditMedicineModal = ({ onClose, medicine, onSuccess }) => {
         sellingPrice: medicine.sellingPrice || "",
         stock: medicine.stock || "",
         minimumStock: medicine.minimumStock || "",
+        packSize: medicine.packSize || "",
         expiryDate: medicine.expiryDate
           ? new Date(medicine.expiryDate).toISOString().substring(0, 10)
           : "",
@@ -72,7 +74,9 @@ const EditMedicineModal = ({ onClose, medicine, onSuccess }) => {
             </div>
             <div>
               <h3 className="text-lg font-bold">Edit Medicine Record</h3>
-              <p className="text-xs text-slate-400 font-medium">SKU ID: {medicine._id}</p>
+              <p className="text-xs text-slate-400 font-medium">
+                SKU ID: {medicine._id}
+              </p>
             </div>
           </div>
           <button
@@ -84,7 +88,10 @@ const EditMedicineModal = ({ onClose, medicine, onSuccess }) => {
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleUpdate} className="p-6 space-y-4 overflow-y-auto flex-1">
+        <form
+          onSubmit={handleUpdate}
+          className="p-6 space-y-4 overflow-y-auto flex-1"
+        >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">

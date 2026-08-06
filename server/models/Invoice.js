@@ -14,6 +14,12 @@ const invoiceSchema = new mongoose.Schema(
       unique: true,
     },
 
+    payment: {
+      type: String,
+      default: "UPI / GPay",
+      trim: true,
+    },
+
     items: [
       {
         medicine: {
@@ -25,6 +31,29 @@ const invoiceSchema = new mongoose.Schema(
         quantity: {
           type: Number,
           required: true,
+        },
+
+        displayQuantity: {
+          type: Number,
+          required: true,
+        },
+
+        unitType: {
+          type: String,
+          enum: [
+            "Tablet",
+            "Strip",
+            "Capsule",
+            "Injection",
+            "Ointment",
+            "Other",
+          ],
+          default: "Tablet",
+        },
+
+        packSize: {
+          type: Number,
+          default: 10,
         },
 
         sellingPrice: {

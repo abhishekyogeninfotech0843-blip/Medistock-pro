@@ -1,6 +1,16 @@
 import React, { useState } from "react";
 import toast from "react-hot-toast";
-import { FaPills, FaBuilding, FaTag, FaBarcode, FaCalendarAlt, FaDollarSign, FaBoxes, FaCheck, FaTimes } from "react-icons/fa";
+import {
+  FaPills,
+  FaBuilding,
+  FaTag,
+  FaBarcode,
+  FaCalendarAlt,
+  FaDollarSign,
+  FaBoxes,
+  FaCheck,
+  FaTimes,
+} from "react-icons/fa";
 import { addMedicine } from "../services/medicineService";
 
 const initialState = {
@@ -13,14 +23,17 @@ const initialState = {
   sellingPrice: "",
   stock: "",
   minimumStock: "",
+  packSize: "10",
 };
 
 const MedicineForm = ({ onSuccess, onClose }) => {
   const [formData, setFormData] = useState(initialState);
   const [loading, setLoading] = useState(false);
+  const [excelFile, setExcelFile] = useState(null);
 
   const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   const calculateMargin = () => {
@@ -62,7 +75,9 @@ const MedicineForm = ({ onSuccess, onClose }) => {
             </div>
             Add New Medicine SKU
           </h3>
-          <p className="text-xs text-slate-500 font-medium">Fill in batch details, prices, and stock limits</p>
+          <p className="text-xs text-slate-500 font-medium">
+            Fill in batch details, prices, and stock limits
+          </p>
         </div>
         {onClose && (
           <button
@@ -197,6 +212,22 @@ const MedicineForm = ({ onSuccess, onClose }) => {
             name="minimumStock"
             placeholder="10"
             value={formData.minimumStock}
+            onChange={handleChange}
+            required
+            className="w-full rounded-xl bg-slate-50 border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:bg-white"
+          />
+        </div>
+
+        {/* Pack Size */}
+        <div>
+          <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+            Pack Size (tablets per strip) *
+          </label>
+          <input
+            type="number"
+            name="packSize"
+            placeholder="10"
+            value={formData.packSize}
             onChange={handleChange}
             required
             className="w-full rounded-xl bg-slate-50 border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:bg-white"
