@@ -22,6 +22,11 @@ import {
 import AppLayout from "../layouts/AppLayout";
 import MedicineForm from "../components/MedicineForm";
 import EditMedicineModal from "../components/EditMedicineModal";
+import {
+  getMedicines,
+  deleteMedicine,
+  importMedicines,
+} from "../services/medicineService";
 import { demoMedicines } from "../utils/demoMedicines";
 
 const Medicine = () => {
