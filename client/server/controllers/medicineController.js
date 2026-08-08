@@ -1,7 +1,7 @@
 const XLSX = require("xlsx");
 const path = require("path");
 const fs = require("fs");
-const StockHistory = require("../models/StockHistory");
+const StockHistory = require("../models/stockhistory");
 const Medicine = require("../models/Medicine");
 
 // ==========================

@@ -8,10 +8,22 @@ const invoiceSchema = new mongoose.Schema(
       trim: true,
     },
 
+    customerPhone: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
     invoiceNumber: {
       type: String,
       required: true,
       unique: true,
+    },
+
+    publicId: {
+      type: String,
+      unique: true,
+      required: true,
     },
 
     items: [
@@ -59,6 +71,23 @@ const invoiceSchema = new mongoose.Schema(
       required: true,
     },
 
+    paymentMethod: {
+      type: String,
+      enum: ["Cash", "UPI", "Card", "Credit"],
+      default: "Cash",
+    },
+
+    paymentStatus: {
+      type: String,
+      enum: ["PAID", "PENDING", "FAILED"],
+      default: "PAID",
+    },
+
+    invoiceUrl: {
+      type: String,
+      default: "",
+    },
+
     invoiceDate: {
       type: Date,
       default: Date.now,
@@ -70,3 +99,4 @@ const invoiceSchema = new mongoose.Schema(
 );
 
 module.exports = mongoose.model("Invoice", invoiceSchema);
+ 

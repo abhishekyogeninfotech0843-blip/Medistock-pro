@@ -1,7 +1,7 @@
 const XLSX = require("xlsx");
 const path = require("path");
 const fs = require("fs");
-const StockHistory = require("../models/StockHistory");
+const StockHistory = require("../models/stockhistory");
 const Medicine = require("../models/Medicine");
 
 // ==========================
@@ -385,17 +385,57 @@ const importMedicinesFromExcel = async (req, res) => {
       });
     }
 
-    const formattedMedicines = medicines.map((m) => ({
-      name: String(m.name || "").trim(),
-      company: String(m.company || "").trim(),
-      category: String(m.category || "").trim(),
-      batchNo: String(m.batchNo || "").trim(),
-      expiryDate: new Date(m.expiryDate),
-      purchasePrice: Number(m.purchasePrice),
-      sellingPrice: Number(m.sellingPrice),
-      stock: Number(m.stock || 0),
-      minimumStock: Number(m.minimumStock || 10),
-    }));
+    const formattedMedicines = medicines
+      .map((m) => ({
+        name: String(
+          m["Medicine Name"] || m["Medicine"] || m["name"] || ""
+        ).trim(),
+
+        company: String(
+          m["Company"] || m["Manufacturer"] || m["company"] || ""
+        ).trim(),
+
+        category: String(
+          m["Category"] || m["category"] || ""
+        ).trim(),
+
+        batchNo: String(
+          m["Batch No"] || m["Batch"] || m["batchNo"] || ""
+        ).trim(),
+
+        expiryDate: m["Expiry Date"]
+          ? new Date(m["Expiry Date"])
+          : m["expiryDate"]
+          ? new Date(m["expiryDate"])
+          : null,
+
+        purchasePrice: Number(
+          m["Purchase Price"] ||
+          m["PurchasePrice"] ||
+          m["purchasePrice"] ||
+          0
+        ),
+
+        sellingPrice: Number(
+          m["Selling Price"] ||
+          m["SellingPrice"] ||
+          m["sellingPrice"] ||
+          0
+        ),
+
+        stock: Number(
+          m["Stock"] ||
+          m["stock"] ||
+          0
+        ),
+
+        minimumStock: Number(
+          m["Minimum Stock"] ||
+          m["minimumStock"] ||
+          10
+        ),
+      }))
+      .filter((m) => m.name !== "");
 
     await Medicine.insertMany(formattedMedicines, {
       ordered: false,

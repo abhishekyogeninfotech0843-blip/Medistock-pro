@@ -22,6 +22,11 @@ import {
 import AppLayout from "../layouts/AppLayout";
 import MedicineForm from "../components/MedicineForm";
 import EditMedicineModal from "../components/EditMedicineModal";
+import {
+  getMedicines,
+  deleteMedicine,
+  importMedicines,
+} from "../services/medicineService";
 import { demoMedicines } from "../utils/demoMedicines";
 
 const Medicine = () => {
@@ -31,7 +36,7 @@ const Medicine = () => {
   const [selectedCategory, setSelectedCategory] = useState("ALL");
   const [stockFilter, setStockFilter] = useState("ALL");
   const [viewMode, setViewMode] = useState("table");
-  const [groupByName, setGroupByName] = useState(true);
+  const [groupByName, setGroupByName] = useState(false);
   const [selectedCompany, setSelectedCompany] = useState("ALL");
   const [loading, setLoading] = useState(true);
 
