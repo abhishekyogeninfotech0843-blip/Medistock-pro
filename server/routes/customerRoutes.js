@@ -12,7 +12,7 @@ const {
   deleteCustomer,
   customerPurchaseHistory,
   searchCustomers,
-} = require("../controllers/customerController");
+} = require("../controllers/Customercontroller");
 
 // ==========================
 // Add Customer
