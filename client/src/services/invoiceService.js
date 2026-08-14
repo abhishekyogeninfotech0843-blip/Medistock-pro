@@ -23,3 +23,10 @@ export const updateInvoicePayment = async (invoiceId, payment) => {
   });
   return response.data;
 };
+
+export const updateInvoiceDue = async (invoiceId, amountPaidNow) => {
+  const response = await api.patch(`/invoices/${invoiceId}/due`, {
+    amountPaidNow,
+  });
+  return response.data;
+};

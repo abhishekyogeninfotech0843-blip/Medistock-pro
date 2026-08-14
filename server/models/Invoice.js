@@ -88,6 +88,22 @@ const invoiceSchema = new mongoose.Schema(
       required: true,
     },
 
+    paidAmount: {
+      type: Number,
+      default: 0,
+    },
+
+    dueAmount: {
+      type: Number,
+      default: 0,
+    },
+
+    customerMobile: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
     invoiceDate: {
       type: Date,
       default: Date.now,

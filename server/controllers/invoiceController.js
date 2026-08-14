@@ -2,6 +2,7 @@ const PDFDocument = require("pdfkit");
 const Invoice = require("../models/Invoice");
 const Medicine = require("../models/Medicine");
 const Counter = require("../models/Counter");
+const Customer = require("../models/Customer");
 
 const normalizePayment = (payment) => {
   let paymentMethod = (payment || "").toString().trim();
@@ -22,7 +23,7 @@ const normalizePayment = (payment) => {
 // ==========================
 const createInvoice = async (req, res) => {
   try {
-    const { customerName, items, discount, gst, payment } = req.body;
+    const { customerName, items, discount, gst, payment, paidAmount, customerMobile } = req.body;
 
     // ==========================
     // Generate Invoice Number
@@ -95,6 +96,12 @@ const createInvoice = async (req, res) => {
 
     const grandTotal = subTotal - Number(discount || 0) + Number(gst || 0);
 
+    const finalPaidAmount =
+      paidAmount !== undefined && paidAmount !== null && paidAmount !== ""
+        ? Math.min(grandTotal, Math.max(0, Number(paidAmount)))
+        : grandTotal;
+    const dueAmount = Math.max(0, grandTotal - finalPaidAmount);
+
     // ==========================
     // Reduce Stock
     // ==========================
@@ -111,6 +118,7 @@ const createInvoice = async (req, res) => {
     // ==========================
     const invoice = await Invoice.create({
       customerName,
+      customerMobile: customerMobile || "",
       invoiceNumber,
       payment: payment || "UPI / GPay",
       items,
@@ -118,7 +126,29 @@ const createInvoice = async (req, res) => {
       discount,
       gst,
       grandTotal,
+      paidAmount: finalPaidAmount,
+      dueAmount,
     });
+
+    // Update Customer due balance if customer name is provided
+    if (customerName && customerName.trim().toLowerCase() !== "walk-in patient") {
+      let cust = await Customer.findOne({
+        name: { $regex: `^${customerName.trim()}$`, $options: "i" },
+      });
+      if (!cust) {
+        await Customer.create({
+          name: customerName.trim(),
+          mobile: customerMobile || "",
+          dueBalance: dueAmount,
+        });
+      } else {
+        cust.dueBalance = (cust.dueBalance || 0) + dueAmount;
+        if (customerMobile && !cust.mobile) {
+          cust.mobile = customerMobile;
+        }
+        await cust.save();
+      }
+    }
 
     const populatedInvoice = await Invoice.findById(invoice._id).populate(
       "items.medicine",
@@ -307,6 +337,12 @@ const searchInvoices = async (req, res) => {
             $options: "i",
           },
         },
+        {
+          customerMobile: {
+            $regex: keyword,
+            $options: "i",
+          },
+        },
       ];
     }
 
@@ -334,6 +370,61 @@ const searchInvoices = async (req, res) => {
     });
   }
 };
+
+// ==========================
+// Update Invoice Due Payment
+// ==========================
+const updateInvoiceDue = async (req, res) => {
+  try {
+    const invoiceId = req.params.id;
+    const { amountPaidNow } = req.body;
+
+    const invoice = await Invoice.findById(invoiceId);
+    if (!invoice) {
+      return res.status(404).json({ success: false, message: "Invoice not found" });
+    }
+
+    const paymentAmount = Number(amountPaidNow || 0);
+    if (paymentAmount <= 0) {
+      return res.status(400).json({ success: false, message: "Valid payment amount required" });
+    }
+
+    const previousDue = invoice.dueAmount || 0;
+    const actualPay = Math.min(previousDue, paymentAmount);
+
+    invoice.paidAmount = (invoice.paidAmount || 0) + actualPay;
+    invoice.dueAmount = Math.max(0, (invoice.dueAmount || 0) - actualPay);
+    await invoice.save();
+
+    // Reduce Customer dueBalance if customer exists
+    if (invoice.customerName && invoice.customerName.toLowerCase() !== "walk-in patient") {
+      const cust = await Customer.findOne({
+        name: { $regex: `^${invoice.customerName.trim()}$`, $options: "i" },
+      });
+      if (cust) {
+        cust.dueBalance = Math.max(0, (cust.dueBalance || 0) - actualPay);
+        await cust.save();
+      }
+    }
+
+    const updatedInvoice = await Invoice.findById(invoiceId).populate(
+      "items.medicine",
+      "name company"
+    );
+
+    res.status(200).json({
+      success: true,
+      message: `Payment of ₹${actualPay} recorded successfully`,
+      data: updatedInvoice,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
 // ==========================
 // Export
 // ==========================
@@ -343,4 +434,6 @@ module.exports = {
   updatePayment,
   downloadInvoicePDF,
   searchInvoices,
+  updateInvoiceDue,
 };
+

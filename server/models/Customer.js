@@ -10,8 +10,7 @@ const customerSchema = new mongoose.Schema(
 
     mobile: {
       type: String,
-      required: true,
-      unique: true,
+      default: "",
       trim: true,
     },
 
@@ -25,6 +24,11 @@ const customerSchema = new mongoose.Schema(
       type: String,
       default: "",
       trim: true,
+    },
+
+    dueBalance: {
+      type: Number,
+      default: 0,
     },
   },
   {

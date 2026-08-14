@@ -52,9 +52,7 @@ const Medicine = () => {
   }, []);
 
   useEffect(() => {
-    const displaySource = groupByName
-      ? aggregateMedicines(medicines)
-      : medicines;
+    const displaySource = medicines;
     let result = [...displaySource];
 
     if (search.trim()) {
@@ -171,8 +169,8 @@ const Medicine = () => {
       const medicineList = Array.isArray(response)
         ? response
         : Array.isArray(response?.data)
-        ? response.data
-        : [];
+          ? response.data
+          : [];
 
       if (medicineList.length > 0) {
         applyMedicines(medicineList);
@@ -190,9 +188,7 @@ const Medicine = () => {
     }
   };
 
-  const displaySourceForCategories = groupByName
-    ? aggregateMedicines(medicines)
-    : medicines;
+  const displaySourceForCategories = medicines;
 
   const categories = [
     "ALL",
@@ -402,37 +398,38 @@ const Medicine = () => {
             <div className="flex items-center p-1 rounded-2xl bg-slate-100 border border-slate-200">
               <button
                 onClick={() => setViewMode("table")}
-                className={`p-2.5 rounded-xl text-sm font-bold transition cursor-pointer ${
-                  viewMode === "table"
-                    ? "bg-white text-blue-600 shadow-sm"
-                    : "text-slate-500 hover:text-slate-800"
-                }`}
+                className={`p-2.5 rounded-xl text-sm font-bold transition cursor-pointer ${viewMode === "table"
+                  ? "bg-white text-blue-600 shadow-sm"
+                  : "text-slate-500 hover:text-slate-800"
+                  }`}
                 title="Table View"
               >
                 <FaThList className="text-base" />
               </button>
               <button
                 onClick={() => setViewMode("grid")}
-                className={`p-2.5 rounded-xl text-sm font-bold transition cursor-pointer ${
-                  viewMode === "grid"
-                    ? "bg-white text-blue-600 shadow-sm"
-                    : "text-slate-500 hover:text-slate-800"
-                }`}
+                className={`p-2.5 rounded-xl text-sm font-bold transition cursor-pointer ${viewMode === "grid"
+                  ? "bg-white text-blue-600 shadow-sm"
+                  : "text-slate-500 hover:text-slate-800"
+                  }`}
                 title="Grid Cards View"
               >
                 <FaThLarge className="text-base" />
               </button>
             </div>
             <button
-              onClick={() => setGroupByName((s) => !s)}
-              className={`ml-3 px-3.5 py-2 rounded-xl text-sm font-bold transition cursor-pointer ${
-                groupByName
-                  ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
-                  : "bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100"
-              }`}
-              title="Toggle consolidated view (group similar products)"
+              onClick={() => {
+                setSearch("");
+                setSelectedCategory("ALL");
+                setSelectedCompany("ALL");
+                setStockFilter("ALL");
+                setGroupByName(false);
+                toast.success("Showing all medicines again");
+              }}
+              className="ml-3 px-3.5 py-2 rounded-xl text-sm font-bold transition cursor-pointer bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100"
+              title="Reset filters and show the complete medicine list"
             >
-              {groupByName ? "Consolidated: ON" : "Consolidated: OFF"}
+              Show All Medicines
             </button>
           </div>
         </div>
@@ -447,11 +444,10 @@ const Medicine = () => {
               <button
                 key={cat}
                 onClick={() => setSelectedCategory(cat)}
-                className={`px-3.5 py-1.5 rounded-xl border transition cursor-pointer ${
-                  selectedCategory === cat
-                    ? "bg-blue-50 text-blue-700 border-blue-300 font-extrabold"
-                    : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
-                }`}
+                className={`px-3.5 py-1.5 rounded-xl border transition cursor-pointer ${selectedCategory === cat
+                  ? "bg-blue-50 text-blue-700 border-blue-300 font-extrabold"
+                  : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                  }`}
               >
                 {cat}
               </button>
@@ -465,11 +461,10 @@ const Medicine = () => {
                 <button
                   key={comp}
                   onClick={() => setSelectedCompany(comp)}
-                  className={`px-3.5 py-1.5 rounded-xl border transition cursor-pointer ${
-                    selectedCompany === comp
-                      ? "bg-emerald-50 text-emerald-700 border-emerald-200 font-extrabold"
-                      : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
-                  }`}
+                  className={`px-3.5 py-1.5 rounded-xl border transition cursor-pointer ${selectedCompany === comp
+                    ? "bg-emerald-50 text-emerald-700 border-emerald-200 font-extrabold"
+                    : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                    }`}
                 >
                   {comp}
                 </button>
@@ -490,11 +485,10 @@ const Medicine = () => {
               <button
                 key={st.id}
                 onClick={() => setStockFilter(st.id)}
-                className={`px-3 py-1.5 rounded-xl border transition cursor-pointer ${
-                  stockFilter === st.id
-                    ? "bg-indigo-50 text-indigo-700 border-indigo-300 font-extrabold"
-                    : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
-                }`}
+                className={`px-3 py-1.5 rounded-xl border transition cursor-pointer ${stockFilter === st.id
+                  ? "bg-indigo-50 text-indigo-700 border-indigo-300 font-extrabold"
+                  : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                  }`}
               >
                 {st.label}
               </button>
@@ -620,13 +614,13 @@ const Medicine = () => {
                         <td className="px-5 py-5 text-sm font-semibold text-slate-700">
                           {med.expiryDate
                             ? new Date(med.expiryDate).toLocaleDateString(
-                                "en-US",
-                                {
-                                  month: "short",
-                                  day: "numeric",
-                                  year: "numeric",
-                                },
-                              )
+                              "en-US",
+                              {
+                                month: "short",
+                                day: "numeric",
+                                year: "numeric",
+                              },
+                            )
                             : "N/A"}
                         </td>
 

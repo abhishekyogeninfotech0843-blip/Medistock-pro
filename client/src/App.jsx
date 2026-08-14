@@ -9,6 +9,7 @@ import Sales from "./pages/Sales";
 import Suppliers from "./pages/Suppliers";
 import Customers from "./pages/Customers";
 import Reports from "./pages/Reports";
+import Balance from "./pages/Balance";
 
 function App() {
   return (
@@ -75,6 +76,24 @@ function App() {
           element={
             <ProtectedRoute>
               <Reports />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/balance"
+          element={
+            <ProtectedRoute>
+              <Balance />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/bala"
+          element={
+            <ProtectedRoute>
+              <Balance />
             </ProtectedRoute>
           }
         />
