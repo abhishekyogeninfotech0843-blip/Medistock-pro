@@ -9,7 +9,65 @@ const Medicine = require("../models/Medicine");
 // ==========================
 const addMedicine = async (req, res) => {
   try {
-    const medicine = await Medicine.create(req.body);
+    const {
+      name,
+      company,
+      category,
+      batchNo,
+      expiryDate,
+      purchasePrice,
+      sellingPrice,
+      stock,
+      minimumStock,
+      packSize,
+    } = req.body;
+
+    if (!name || !company || !category || !batchNo || !expiryDate) {
+      return res.status(400).json({
+        success: false,
+        message: "Please fill in all required fields (Name, Company, Category, Batch No, Expiry Date)",
+      });
+    }
+
+    const parsedPurchasePrice = Number(purchasePrice);
+    const parsedSellingPrice = Number(sellingPrice);
+    if (isNaN(parsedPurchasePrice) || isNaN(parsedSellingPrice)) {
+      return res.status(400).json({
+        success: false,
+        message: "Purchase price and selling price must be valid numbers",
+      });
+    }
+
+    const parsedStock = Number(stock) || 0;
+    const parsedMinimumStock = Number(minimumStock) || 10;
+    const parsedPackSize = Number(packSize) || 10;
+
+    const formattedData = {
+      name: String(name).trim(),
+      company: String(company).trim(),
+      category: String(category).trim(),
+      batchNo: String(batchNo).trim(),
+      expiryDate: new Date(expiryDate),
+      purchasePrice: parsedPurchasePrice,
+      sellingPrice: parsedSellingPrice,
+      stock: parsedStock,
+      minimumStock: parsedMinimumStock,
+      packSize: parsedPackSize,
+    };
+
+    const medicine = await Medicine.create(formattedData);
+
+    if (parsedStock > 0) {
+      try {
+        await StockHistory.create({
+          medicine: medicine._id,
+          type: "IN",
+          quantity: parsedStock,
+        });
+      } catch (histErr) {
+        console.error("Stock history creation warning:", histErr.message);
+      }
+    }
 
     res.status(201).json({
       success: true,
@@ -84,9 +142,21 @@ const updateMedicine = async (req, res) => {
       });
     }
 
+    const updateData = { ...req.body };
+    if (updateData.name) updateData.name = String(updateData.name).trim();
+    if (updateData.company) updateData.company = String(updateData.company).trim();
+    if (updateData.category) updateData.category = String(updateData.category).trim();
+    if (updateData.batchNo) updateData.batchNo = String(updateData.batchNo).trim();
+    if (updateData.purchasePrice !== undefined) updateData.purchasePrice = Number(updateData.purchasePrice);
+    if (updateData.sellingPrice !== undefined) updateData.sellingPrice = Number(updateData.sellingPrice);
+    if (updateData.stock !== undefined) updateData.stock = Number(updateData.stock);
+    if (updateData.minimumStock !== undefined) updateData.minimumStock = Number(updateData.minimumStock);
+    if (updateData.packSize !== undefined) updateData.packSize = Number(updateData.packSize);
+    if (updateData.expiryDate) updateData.expiryDate = new Date(updateData.expiryDate);
+
     const updatedMedicine = await Medicine.findByIdAndUpdate(
       req.params.id,
-      req.body,
+      updateData,
       {
         new: true,
         runValidators: true,

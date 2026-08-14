@@ -1,6 +1,7 @@
 const express = require("express");
 const dotenv = require("dotenv");
 const cors = require("cors");
+const path = require("path");
 
 const connectDB = require("./config/db");
 const seedAdmin = require("./scripts/seedAdmin");
@@ -45,48 +46,44 @@ const app = express();
 // Middleware
 // ==========================
 app.use(cors());
-
 app.use(express.json());
-
-// ==========================
-// Home Route
-// ==========================
-app.get("/", (req, res) => {
-  res.send("🚀 MediStock Pro API Running...");
-});
 
 // ==========================
 // API Routes
 // ==========================
 app.use("/api/auth", authRoutes);
-
 app.use("/api/medicines", medicineRoutes);
-
 app.use("/api/dashboard", dashboardRoutes);
-
 app.use("/api/suppliers", supplierRoutes);
-
 app.use("/api/purchases", purchaseRoutes);
-
 app.use("/api/sales", saleRoutes);
-
 app.use("/api/invoices", invoiceRoutes);
-
 app.use("/api/reports", reportRoutes);
-
 app.use("/api/customers", customerRoutes);
-
 app.use("/api/inventory", inventoryRoutes);
-
 app.use("/api/stock-ledger", stockLedgerRoutes);
-
 app.use("/api/stock-dashboard", stockDashboardRoutes);
-
 app.use("/api/top-selling", topSellingRoutes);
-
 app.use("/api/inventory-alerts", alertDashboardRoutes);
-
 app.use("/api/notifications", notificationRoutes);
+
+// ==========================
+// Serve Client Static Files & SPA Catch-All Route
+// ==========================
+const clientDistPath = path.join(__dirname, "../client/dist");
+app.use(express.static(clientDistPath));
+
+app.get("*", (req, res, next) => {
+  if (req.path.startsWith("/api")) {
+    return next();
+  }
+  const indexPath = path.join(clientDistPath, "index.html");
+  res.sendFile(indexPath, (err) => {
+    if (err) {
+      res.send("🚀 MediStock Pro API Running...");
+    }
+  });
+});
 
 // ==========================
 // Start Scheduler

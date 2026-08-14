@@ -28,6 +28,21 @@ const userSchema = new mongoose.Schema(
       enum: ["admin", "staff"],
       default: "staff",
     },
+
+    // Phone & OTP Verification
+    phone: {
+      type: String,
+      trim: true,
+      sparse: true,
+    },
+    otp: {
+      code: { type: String, default: null },
+      expiresAt: { type: Date, default: null },
+    },
+    isPhoneVerified: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,
