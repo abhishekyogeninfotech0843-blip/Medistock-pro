@@ -452,8 +452,14 @@ const Sales = () => {
             <tbody className="divide-y divide-slate-100 text-base">
               {paymentFiltered.map((inv) => {
                 const totalAmt = Number(inv.grandTotal ?? inv.total ?? 0);
-                const dueAmt = Number(inv.dueAmount ?? 0);
-                const paidAmt = Number(inv.paidAmount ?? (totalAmt - dueAmt));
+                const paidAmt = Number(
+                  inv.paidAmount !== undefined && inv.paidAmount !== null
+                    ? inv.paidAmount
+                    : inv.dueAmount !== undefined
+                    ? Math.max(0, totalAmt - Number(inv.dueAmount))
+                    : totalAmt
+                );
+                const dueAmt = Math.max(0, Number((totalAmt - paidAmt).toFixed(2)));
 
                 return (
                   <tr

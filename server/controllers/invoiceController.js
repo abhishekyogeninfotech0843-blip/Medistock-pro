@@ -425,11 +425,26 @@ const updateInvoiceDue = async (req, res) => {
       return res.status(400).json({ success: false, message: "Valid payment amount required" });
     }
 
-    const previousDue = invoice.dueAmount || 0;
-    const actualPay = Math.min(previousDue, paymentAmount);
+    const grandTotal = Number(invoice.grandTotal || 0);
+    const currentPaid = Number(
+      invoice.paidAmount !== undefined && invoice.paidAmount !== null
+        ? invoice.paidAmount
+        : grandTotal
+    );
+    const currentDue = Math.max(0, grandTotal - currentPaid);
 
-    invoice.paidAmount = (invoice.paidAmount || 0) + actualPay;
-    invoice.dueAmount = Math.max(0, (invoice.dueAmount || 0) - actualPay);
+    if (currentDue <= 0) {
+      return res.status(400).json({ success: false, message: "Invoice is already paid in full" });
+    }
+
+    // Actual payment received cannot exceed current remaining due
+    const actualPay = Math.min(currentDue, paymentAmount);
+
+    const newPaidAmount = currentPaid + actualPay;
+    const newDueAmount = Math.max(0, grandTotal - newPaidAmount);
+
+    invoice.paidAmount = newPaidAmount;
+    invoice.dueAmount = newDueAmount;
     await invoice.save();
 
     // Reduce Customer dueBalance if customer exists
@@ -450,7 +465,7 @@ const updateInvoiceDue = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: `Payment of ₹${actualPay} recorded successfully`,
+      message: `Payment of ₹${actualPay} received. Remaining due: ₹${newDueAmount}`,
       data: updatedInvoice,
     });
   } catch (error) {
