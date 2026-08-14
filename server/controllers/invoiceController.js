@@ -23,7 +23,26 @@ const normalizePayment = (payment) => {
 // ==========================
 const createInvoice = async (req, res) => {
   try {
-    const { customerName, items, discount, gst, payment, paidAmount, customerMobile } = req.body;
+    const { customerName, items: rawItems, discount, gst, payment, paidAmount, customerMobile } = req.body;
+
+    // Consolidate duplicate medicine entries in rawItems
+    const consolidatedMap = new Map();
+    (rawItems || []).forEach((item) => {
+      const medId = String(item.medicine || "");
+      if (!medId) return;
+
+      if (consolidatedMap.has(medId)) {
+        const existing = consolidatedMap.get(medId);
+        existing.displayQuantity =
+          (Number(existing.displayQuantity) || Number(existing.quantity) || 1) +
+          (Number(item.displayQuantity) || Number(item.quantity) || 1);
+        existing.quantity =
+          (Number(existing.quantity) || 1) + (Number(item.quantity) || 1);
+      } else {
+        consolidatedMap.set(medId, { ...item });
+      }
+    });
+    const items = Array.from(consolidatedMap.values());
 
     // ==========================
     // Generate Invoice Number

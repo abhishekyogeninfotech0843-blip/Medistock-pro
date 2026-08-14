@@ -106,12 +106,24 @@ const Sales = () => {
       return;
     }
 
+    // Consolidate any duplicate medicine selections
+    const consolidatedMap = new Map();
+    validItems.forEach((item) => {
+      if (consolidatedMap.has(item.medicine)) {
+        const existing = consolidatedMap.get(item.medicine);
+        existing.quantity = Number(existing.quantity) + Number(item.quantity);
+      } else {
+        consolidatedMap.set(item.medicine, { ...item });
+      }
+    });
+    const consolidatedItems = Array.from(consolidatedMap.values());
+
     try {
       setSubmitting(true);
       const payload = {
         customerName: form.customer || "Walk-in Patient",
         customerMobile: form.customerMobile || "",
-        items: validItems.map((item) => {
+        items: consolidatedItems.map((item) => {
           const medicine = medicines.find((m) => m._id === item.medicine);
           const packSize = Number(medicine?.packSize || 10);
           return {
@@ -651,9 +663,39 @@ const Sales = () => {
                                     key={medicine._id}
                                     onMouseDown={(e) => e.preventDefault()}
                                     onClick={() => {
+                                      const existingIndex = form.items.findIndex(
+                                        (it, i) => i !== index && it.medicine === medicine._id
+                                      );
+
+                                      if (existingIndex !== -1) {
+                                        const updatedItems = [...form.items];
+                                        const currentQty = Number(updatedItems[existingIndex].quantity) || 1;
+                                        updatedItems[existingIndex].quantity = currentQty + 1;
+
+                                        toast.error(
+                                          `"${medicine.name}" bill me pehle se added hai! Quantity ++ kar di gayi hai.`
+                                        );
+
+                                        if (updatedItems.length > 1) {
+                                          updatedItems.splice(index, 1);
+                                        } else {
+                                          updatedItems[index] = {
+                                            medicine: "",
+                                            quantity: "",
+                                            unitType: "Tablet",
+                                            search: "",
+                                          };
+                                        }
+
+                                        setForm({ ...form, items: updatedItems });
+                                        setActiveDropdownIndex(null);
+                                        return;
+                                      }
+
                                       const updatedItems = [...form.items];
                                       updatedItems[index].medicine = medicine._id;
                                       updatedItems[index].search = medicine.name;
+                                      updatedItems[index].quantity = updatedItems[index].quantity || 1;
                                       updatedItems[index].unitType =
                                         categoryToUnitType(medicine.category);
                                       setForm({ ...form, items: updatedItems });
