@@ -4,6 +4,7 @@ const Customer = require("../models/Customer");
 const Purchase = require("../models/Purchase");
 const Sale = require("../models/Sale");
 const Notification = require("../models/Notification");
+const Invoice = require("../models/Invoice");
 
 const getDashboard = async (req, res) => {
   try {
@@ -45,6 +46,16 @@ const getDashboard = async (req, res) => {
       read: false,
     });
 
+    // Customer Dues / Credit Tracking
+    const dueInvoices = await Invoice.find({ dueAmount: { $gt: 0 } }).sort({
+      createdAt: -1,
+    });
+
+    const totalCustomerDues = dueInvoices.reduce(
+      (sum, inv) => sum + (inv.dueAmount || 0),
+      0,
+    );
+
     res.json({
       totalMedicines,
       totalSuppliers,
@@ -54,6 +65,8 @@ const getDashboard = async (req, res) => {
       lowStock,
       expiredMedicines,
       notifications,
+      totalCustomerDues,
+      customerDuesList: dueInvoices,
     });
   } catch (error) {
     res.status(500).json({

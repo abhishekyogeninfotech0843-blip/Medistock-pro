@@ -33,6 +33,7 @@ import {
   getInvoices,
   downloadInvoicePDF,
   updateInvoicePayment,
+  updateInvoiceDue,
 } from "../services/invoiceService";
 import { getMedicines } from "../services/medicineService";
 
@@ -48,9 +49,11 @@ const Sales = () => {
   const [editPayment, setEditPayment] = useState("");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [duePayAmount, setDuePayAmount] = useState("");
 
   const [form, setForm] = useState({
     customer: "",
+    customerMobile: "",
     items: [
       {
         medicine: "",
@@ -62,6 +65,7 @@ const Sales = () => {
     payment: "UPI / GPay",
     discount: "",
     gst: "",
+    paidAmount: "",
   });
   useEffect(() => {
     const loadData = async () => {
@@ -106,6 +110,7 @@ const Sales = () => {
       setSubmitting(true);
       const payload = {
         customerName: form.customer || "Walk-in Patient",
+        customerMobile: form.customerMobile || "",
         items: validItems.map((item) => {
           const medicine = medicines.find((m) => m._id === item.medicine);
           const packSize = Number(medicine?.packSize || 10);
@@ -123,6 +128,7 @@ const Sales = () => {
         payment: form.payment,
         discount: Number(form.discount || 0),
         gst: Number(form.gst || 0),
+        paidAmount: form.paidAmount !== "" ? Number(form.paidAmount) : undefined,
       };
 
       const result = await createInvoice(payload);
@@ -135,6 +141,7 @@ const Sales = () => {
       setActiveInvoice({
         id: createdInvoice.invoiceNumber,
         customer: createdInvoice.customerName,
+        customerMobile: createdInvoice.customerMobile,
         items: createdInvoice.items
           .map(
             (item) =>
@@ -144,6 +151,8 @@ const Sales = () => {
           )
           .join(", "),
         total: createdInvoice.grandTotal,
+        paidAmount: createdInvoice.paidAmount ?? createdInvoice.grandTotal,
+        dueAmount: createdInvoice.dueAmount ?? 0,
         payment: createdInvoice.payment,
         invoiceId: createdInvoice._id,
       });
@@ -151,16 +160,19 @@ const Sales = () => {
 
       setForm({
         customer: "",
+        customerMobile: "",
         items: [
           {
             medicine: "",
             quantity: "",
             unitType: "Tablet",
+            search: "",
           },
         ],
         payment: "UPI / GPay",
         discount: "",
         gst: "",
+        paidAmount: "",
       });
 
       const updatedMedicines = await getMedicines().catch(() => ({ data: [] }));
@@ -193,9 +205,35 @@ const Sales = () => {
     }
   };
 
+  const calculatedSubTotal = (form.items || []).reduce((sum, item) => {
+    if (!item.medicine || !item.quantity) return sum;
+    const med = medicines.find((m) => m._id === item.medicine);
+    if (!med) return sum;
+    const packSize = Number(med.packSize || 10);
+    const qty = Number(item.quantity);
+    const price =
+      item.unitType === "Strip"
+        ? Number(med.sellingPrice)
+        : Number((med.sellingPrice / packSize).toFixed(2));
+    return sum + price * qty;
+  }, 0);
+
+  const calculatedGrandTotal = Math.max(
+    0,
+    calculatedSubTotal - Number(form.discount || 0) + Number(form.gst || 0),
+  );
+  const effectivePaidAmount =
+    form.paidAmount === ""
+      ? calculatedGrandTotal
+      : Math.min(calculatedGrandTotal, Math.max(0, Number(form.paidAmount)));
+  const calculatedDueAmount = Math.max(0, calculatedGrandTotal - effectivePaidAmount);
+
   const filteredBySearch = (sales || []).filter(
     (s) =>
       (s.customerName || s.customer || "")
+        .toLowerCase()
+        .includes(search.toLowerCase()) ||
+      (s.customerMobile || s.phone || s.mobile || "")
         .toLowerCase()
         .includes(search.toLowerCase()) ||
       (s.invoiceNumber || "").toLowerCase().includes(search.toLowerCase()),
@@ -313,10 +351,10 @@ const Sales = () => {
           { id: "ALL", label: `All (${sales.length})` },
           {
             id: "UPI / GPay",
-            label: `UPI (${paymentCounts["UPI / GPay"] || 0})`,
+            label: `UPI (${sales.filter(s => (s.payment||"").includes("UPI")).length})`,
           },
-          { id: "Cash", label: `Cash (${paymentCounts.Cash || 0})` },
-          { id: "Card", label: `Card (${paymentCounts.Card || 0})` },
+          { id: "Cash", label: `Cash (${sales.filter(s => (s.payment||"").includes("Cash")).length})` },
+          { id: "Card", label: `Card (${sales.filter(s => (s.payment||"").includes("Card")).length})` },
         ].map((p) => (
           <button
             key={p.id}
@@ -331,15 +369,13 @@ const Sales = () => {
           </button>
         ))}
       </div>
-
-      {/* Search & Date Filter Bar */}
-      <div className="bg-white p-5 rounded-3xl border border-slate-200/90 shadow-sm font-sans">
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-4">
+      <div className="bg-white p-5 rounded-3xl border border-slate-200/90 shadow-sm font-sans space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
           <div className="relative">
             <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-base" />
             <input
               type="text"
-              placeholder="Search invoice number or patient name..."
+              placeholder="Search invoice number, patient name, or phone number..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full h-12 pl-11 pr-4 rounded-2xl bg-slate-50 border-2 border-slate-200 text-base text-slate-900 outline-none transition focus:border-blue-600 focus:bg-white focus:ring-4 focus:ring-blue-100 font-medium"
@@ -373,337 +409,468 @@ const Sales = () => {
                 <th className="px-6 py-4">Patient / Customer</th>
                 <th className="px-6 py-4">Items Billed</th>
                 <th className="px-6 py-4">Payment Method</th>
-                <th className="px-6 py-4">Total Bill (₹)</th>
+                <th className="px-6 py-4">Total & Due Status</th>
                 <th className="px-6 py-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-base">
-              {paymentFiltered.map((inv) => (
-                <tr
-                  key={inv._id || inv.id}
-                  className="hover:bg-slate-50 transition-colors"
-                >
-                  <td className="px-6 py-5 font-mono font-extrabold text-indigo-600">
-                    {inv.invoiceNumber || inv.id}
-                  </td>
-                  <td className="px-6 py-5 font-bold text-slate-900">
-                    {inv.customerName || inv.customer}
-                  </td>
-                  <td className="px-6 py-5 text-slate-600 text-sm font-semibold">
-                    {inv.items
-                      ? inv.items
-                          .map((item) =>
-                            item.medicine?.name
-                              ? `${item.medicine.name} - ${item.displayQuantity || item.quantity} ${item.unitType || "Tablet"}`
-                              : "Unknown item",
-                          )
-                          .join(", ")
-                      : `${inv.medicine?.name || "Medicine"} x${inv.quantity || 1}`}
-                  </td>
-                  <td className="px-6 py-5">
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold bg-slate-100 text-slate-800">
-                      {inv.payment || "UPI / GPay"}
-                    </span>
-                  </td>
-                  <td className="px-6 py-5 font-black text-emerald-600 text-lg">
-                    ₹{Number(inv.grandTotal ?? inv.total ?? 0).toFixed(2)}
-                  </td>
-                  <td className="px-6 py-5 text-right">
-                    <button
-                      onClick={() =>
-                        setActiveInvoice({
-                          id: inv.invoiceNumber || inv.id,
-                          customer: inv.customerName || inv.customer,
-                          items:
-                            inv.items ||
-                            `${inv.medicine?.name || "Medicine"} x${inv.quantity || 1}`,
-                          total: Number(inv.grandTotal ?? inv.total ?? 0),
-                          payment: inv.payment || "UPI / GPay",
-                          invoiceId: inv._id || inv.id,
-                        })
-                      }
-                      className="px-4 py-2 rounded-xl bg-blue-50 text-blue-700 border border-blue-200 font-extrabold text-xs hover:bg-blue-100 transition flex items-center gap-2 ml-auto cursor-pointer"
-                    >
-                      <FaReceipt />
-                      <span>View Receipt</span>
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {paymentFiltered.map((inv) => {
+                const totalAmt = Number(inv.grandTotal ?? inv.total ?? 0);
+                const dueAmt = Number(inv.dueAmount ?? 0);
+                const paidAmt = Number(inv.paidAmount ?? (totalAmt - dueAmt));
+
+                return (
+                  <tr
+                    key={inv._id || inv.id}
+                    className="hover:bg-slate-50 transition-colors"
+                  >
+                    <td className="px-6 py-5 font-mono font-extrabold text-indigo-600">
+                      {inv.invoiceNumber || inv.id}
+                    </td>
+                    <td className="px-6 py-5 font-bold text-slate-900">
+                      <div>
+                        <span>{inv.customerName || inv.customer}</span>
+                        {inv.customerMobile && (
+                          <span className="block text-xs font-normal text-slate-400">
+                            {inv.customerMobile}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-5 text-slate-600 text-sm font-semibold">
+                      {inv.items
+                        ? inv.items
+                            .map((item) =>
+                              item.medicine?.name
+                                ? `${item.medicine.name} - ${item.displayQuantity || item.quantity} ${item.unitType || "Tablet"}`
+                                : "Medicine item",
+                            )
+                            .join(", ")
+                        : `${inv.medicine?.name || "Medicine"} x${inv.quantity || 1}`}
+                    </td>
+                    <td className="px-6 py-5">
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold bg-slate-100 text-slate-800">
+                        {inv.payment || "UPI / GPay"}
+                      </span>
+                    </td>
+                    <td className="px-6 py-5">
+                      <div className="space-y-1">
+                        <span className="block font-black text-slate-900 text-lg">
+                          ₹{totalAmt.toFixed(2)}
+                        </span>
+                        {dueAmt > 0 ? (
+                          <span className="inline-block text-[11px] font-extrabold px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-700">
+                            Paid: ₹{paidAmt.toFixed(0)} | Due: ₹{dueAmt.toFixed(0)}
+                          </span>
+                        ) : (
+                          <span className="inline-block text-[11px] font-extrabold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+                            Paid in Full
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-5 text-right">
+                      <button
+                        onClick={() =>
+                          setActiveInvoice({
+                            id: inv.invoiceNumber || inv.id,
+                            customer: inv.customerName || inv.customer,
+                            customerMobile: inv.customerMobile || "",
+                            items:
+                              inv.items
+                                ? inv.items
+                                    .map((item) =>
+                                      item.medicine?.name
+                                        ? `${item.medicine.name} - ${item.displayQuantity || item.quantity} ${item.unitType || "Tablet"}`
+                                        : "Medicine item",
+                                    )
+                                    .join(", ")
+                                : `${inv.medicine?.name || "Medicine"} x${inv.quantity || 1}`,
+                            total: totalAmt,
+                            paidAmount: paidAmt,
+                            dueAmount: dueAmt,
+                            payment: inv.payment || "UPI / GPay",
+                            invoiceId: inv._id || inv.id,
+                          })
+                        }
+                        className="px-4 py-2 rounded-xl bg-blue-50 text-blue-700 border border-blue-200 font-extrabold text-xs hover:bg-blue-100 transition flex items-center gap-2 ml-auto cursor-pointer"
+                      >
+                        <FaReceipt />
+                        <span>View Receipt</span>
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}
       </div>
 
-      {/* New POS Modal */}
+      {/* New POS Modal with Scrollbar & Due Calculation */}
       {showPOSModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm font-sans">
-          <div className="w-full max-w-2xl bg-white rounded-3xl p-8 shadow-2xl border border-slate-200 space-y-6">
-            <h3 className="text-2xl font-extrabold text-slate-900">
-              New POS Transaction
-            </h3>
-            <form onSubmit={handleCreateSale} className="space-y-5">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-sm font-sans overflow-hidden">
+          <div className="w-full max-w-3xl max-h-[90vh] bg-white rounded-3xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden">
+            {/* Modal Header - Fixed */}
+            <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/80">
               <div>
-                <label className="block text-sm font-bold text-slate-800 mb-1.5">
-                  Patient / Customer Name
-                </label>
-                <input
-                  placeholder="Customer name (or leave blank for walk-in)"
-                  value={form.customer}
-                  onChange={(e) =>
-                    setForm({ ...form, customer: e.target.value })
-                  }
-                  className="w-full h-12 rounded-2xl bg-slate-50 border-2 border-slate-200 px-4 text-base"
-                />
+                <h3 className="text-xl font-extrabold text-slate-900">
+                  New POS Transaction
+                </h3>
+                <p className="text-xs text-slate-500 font-medium">Create bill & track stock / due balance</p>
               </div>
+              <button
+                type="button"
+                onClick={() => setShowPOSModal(false)}
+                className="h-9 w-9 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold flex items-center justify-center text-lg transition cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
 
-              <div className="space-y-4">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-sm font-bold text-slate-800">
-                    Cart Items
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setForm((prev) => ({
-                        ...prev,
-                        items: [
-                          ...prev.items,
-                          {
-                            medicine: "",
-                            quantity: "",
-                            unitType: "Tablet",
-                            search: "",
-                          },
-                        ],
-                      }))
-                    }
-                    className="px-4 py-2 rounded-2xl bg-blue-600 text-white text-sm font-bold"
-                  >
-                    Add Item
-                  </button>
-                </div>
-
-                {form.items.map((item, index) => (
-                  <div
-                    key={`${item.medicine}-${index}`}
-                    className="grid grid-cols-12 gap-3 items-end"
-                  >
-                    <div className="col-span-5 relative">
-                      <label className="block text-sm font-bold text-slate-800 mb-1.5">
-                        Medicine
-                      </label>
-                      <div className="relative">
-                        <input
-                          type="text"
-                          placeholder="Search medicine..."
-                          value={item.search || ""}
-                          onFocus={() => setActiveDropdownIndex(index)}
-                          onClick={() => setActiveDropdownIndex(index)}
-                          onBlur={() => setTimeout(() => setActiveDropdownIndex(null), 200)}
-                          onChange={(e) => {
-                            const updatedItems = [...form.items];
-                            updatedItems[index].search = e.target.value;
-                            updatedItems[index].medicine = "";
-                            setForm({ ...form, items: updatedItems });
-                            setActiveDropdownIndex(index);
-                          }}
-                          className="w-full h-12 rounded-2xl bg-slate-50 border-2 border-slate-200 pl-4 pr-10 text-base outline-none focus:border-blue-500 font-medium text-slate-800"
-                        />
-                        <FaChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none" />
-                      </div>
-
-                      {activeDropdownIndex === index && (
-                        <div className="absolute left-0 right-0 z-30 mt-1 max-h-56 overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-xl py-1">
-                          {(() => {
-                            const searchInput = (item.search || "").trim().toLowerCase();
-                            const selectedMed = medicines.find((m) => m._id === item.medicine);
-                            const isMatchedSelection = selectedMed && selectedMed.name.toLowerCase() === searchInput;
-
-                            const filtered = (!searchInput || isMatchedSelection)
-                              ? medicines
-                              : medicines.filter(
-                                  (m) =>
-                                    (m.name || "").toLowerCase().includes(searchInput) ||
-                                    (m.category || "").toLowerCase().includes(searchInput) ||
-                                    (m.company || "").toLowerCase().includes(searchInput)
-                                );
-
-                            if (filtered.length === 0) {
-                              return (
-                                <div className="px-4 py-3 text-sm text-slate-500 font-medium text-center">
-                                  No matching medicine found.
-                                </div>
-                              );
-                            }
-
-                            return filtered.slice(0, 15).map((medicine) => (
-                              <button
-                                type="button"
-                                key={medicine._id}
-                                onMouseDown={(e) => e.preventDefault()}
-                                onClick={() => {
-                                  const updatedItems = [...form.items];
-                                  updatedItems[index].medicine = medicine._id;
-                                  updatedItems[index].search = medicine.name;
-                                  updatedItems[index].unitType =
-                                    categoryToUnitType(medicine.category);
-                                  setForm({ ...form, items: updatedItems });
-                                  setActiveDropdownIndex(null);
-                                }}
-                                className="w-full text-left px-4 py-2.5 text-sm hover:bg-blue-50/80 transition flex items-center justify-between group border-b border-slate-50 last:border-0"
-                              >
-                                <div>
-                                  <span className="font-semibold text-slate-800 group-hover:text-blue-600 block">
-                                    {medicine.name}
-                                  </span>
-                                  <span className="text-xs text-slate-400">
-                                    {medicine.category || "General"} {medicine.company ? `• ${medicine.company}` : ""}
-                                  </span>
-                                </div>
-                                <div className="text-right">
-                                  <span
-                                    className={`text-xs font-bold px-2.5 py-0.5 rounded-full ${
-                                      medicine.stock > 10
-                                        ? "bg-emerald-100 text-emerald-700"
-                                        : "bg-amber-100 text-amber-700"
-                                    }`}
-                                  >
-                                    Stock: {medicine.stock}
-                                  </span>
-                                </div>
-                              </button>
-                            ));
-                          })()}
-                        </div>
-                      )}
-                    </div>
-                    <div className="col-span-2">
-                      <label className="block text-sm font-bold text-slate-800 mb-1.5">
-                        Unit
-                      </label>
-                      <select
-                        value={item.unitType || "Tablet"}
-                        onChange={(e) => {
-                          const updatedItems = [...form.items];
-                          updatedItems[index].unitType = e.target.value;
-                          setForm({ ...form, items: updatedItems });
-                        }}
-                        className="w-full h-12 rounded-2xl bg-slate-50 border-2 border-slate-200 px-4 text-base"
-                      >
-                        <option value="Tablet">Tablet</option>
-                        <option value="Strip">Strip</option>
-                        <option value="Capsule">Capsule</option>
-                        <option value="Injection">Injection</option>
-                        <option value="Ointment">Ointment</option>
-                        <option value="Other">Other</option>
-                      </select>
-                    </div>
-                    <div className="col-span-2">
-                      <label className="block text-sm font-bold text-slate-800 mb-1.5">
-                        Qty
-                      </label>
-                      <input
-                        type="number"
-                        min="1"
-                        placeholder="Enter quantity"
-                        value={item.quantity}
-                        onChange={(e) => {
-                          const updatedItems = [...form.items];
-                          updatedItems[index].quantity =
-                            e.target.value === "" ? "" : Number(e.target.value);
-                          setForm({ ...form, items: updatedItems });
-                        }}
-                        className="w-full h-12 rounded-2xl bg-slate-50 border-2 border-slate-200 px-4 text-base"
-                      />
-                    </div>
-                    <div className="col-span-3 flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setForm((prev) => ({
-                            ...prev,
-                            items: prev.items.filter((_, i) => i !== index),
-                          }));
-                        }}
-                        className="w-full h-12 rounded-2xl bg-rose-500 text-white font-bold"
-                      >
-                        Remove
-                      </button>
-                    </div>
+            {/* Scrollable Form Body */}
+            <form onSubmit={handleCreateSale} className="flex flex-col flex-1 overflow-hidden">
+              <div className="p-6 overflow-y-auto max-h-[calc(90vh-140px)] space-y-5">
+                {/* Customer Details */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-bold text-slate-800 mb-1.5">
+                      Patient / Customer Name
+                    </label>
+                    <input
+                      placeholder="Customer name (or leave blank for walk-in)"
+                      value={form.customer}
+                      onChange={(e) =>
+                        setForm({ ...form, customer: e.target.value })
+                      }
+                      className="w-full h-12 rounded-2xl bg-slate-50 border-2 border-slate-200 px-4 text-base font-medium"
+                    />
                   </div>
-                ))}
+                  <div>
+                    <label className="block text-sm font-bold text-slate-800 mb-1.5">
+                      Mobile Number (Optional)
+                    </label>
+                    <input
+                      placeholder="+91 98000 00000"
+                      value={form.customerMobile || ""}
+                      onChange={(e) =>
+                        setForm({ ...form, customerMobile: e.target.value })
+                      }
+                      className="w-full h-12 rounded-2xl bg-slate-50 border-2 border-slate-200 px-4 text-base font-medium"
+                    />
+                  </div>
+                </div>
+
+                {/* Cart Items Section */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm font-bold text-slate-800">
+                      Cart Items ({form.items.length})
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setForm((prev) => ({
+                          ...prev,
+                          items: [
+                            ...prev.items,
+                            {
+                              medicine: "",
+                              quantity: "",
+                              unitType: "Tablet",
+                              search: "",
+                            },
+                          ],
+                        }))
+                      }
+                      className="px-4 py-2 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold transition flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <FaPlus className="text-xs" />
+                      <span>Add Item</span>
+                    </button>
+                  </div>
+
+                  {/* Cart Items Scroll Container */}
+                  <div className="max-h-64 overflow-y-auto space-y-3 p-3 rounded-2xl bg-slate-50/70 border border-slate-200 pr-2">
+                    {form.items.map((item, index) => (
+                      <div
+                        key={`${item.medicine}-${index}`}
+                        className="grid grid-cols-12 gap-3 items-end bg-white p-3 rounded-2xl border border-slate-200/80 shadow-sm"
+                      >
+                        <div className="col-span-5 relative">
+                          <label className="block text-xs font-bold text-slate-600 mb-1">
+                            Medicine
+                          </label>
+                          <div className="relative">
+                            <input
+                              type="text"
+                              placeholder="Search medicine..."
+                              value={item.search || ""}
+                              onFocus={() => setActiveDropdownIndex(index)}
+                              onClick={() => setActiveDropdownIndex(index)}
+                              onBlur={() => setTimeout(() => setActiveDropdownIndex(null), 200)}
+                              onChange={(e) => {
+                                const updatedItems = [...form.items];
+                                updatedItems[index].search = e.target.value;
+                                updatedItems[index].medicine = "";
+                                setForm({ ...form, items: updatedItems });
+                                setActiveDropdownIndex(index);
+                              }}
+                              className="w-full h-10 rounded-xl bg-slate-50 border border-slate-300 pl-3 pr-8 text-sm outline-none focus:border-blue-500 font-medium text-slate-800"
+                            />
+                            <FaChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none" />
+                          </div>
+
+                          {activeDropdownIndex === index && (
+                            <div className="absolute left-0 right-0 z-30 mt-1 max-h-52 overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-xl py-1">
+                              {(() => {
+                                const searchInput = (item.search || "").trim().toLowerCase();
+                                const selectedMed = medicines.find((m) => m._id === item.medicine);
+                                const isMatchedSelection = selectedMed && selectedMed.name.toLowerCase() === searchInput;
+
+                                const filtered = (!searchInput || isMatchedSelection)
+                                  ? medicines
+                                  : medicines.filter(
+                                      (m) =>
+                                        (m.name || "").toLowerCase().includes(searchInput) ||
+                                        (m.category || "").toLowerCase().includes(searchInput) ||
+                                        (m.company || "").toLowerCase().includes(searchInput)
+                                    );
+
+                                if (filtered.length === 0) {
+                                  return (
+                                    <div className="px-4 py-3 text-sm text-slate-500 font-medium text-center">
+                                      No matching medicine found.
+                                    </div>
+                                  );
+                                }
+
+                                return filtered.slice(0, 15).map((medicine) => (
+                                  <button
+                                    type="button"
+                                    key={medicine._id}
+                                    onMouseDown={(e) => e.preventDefault()}
+                                    onClick={() => {
+                                      const updatedItems = [...form.items];
+                                      updatedItems[index].medicine = medicine._id;
+                                      updatedItems[index].search = medicine.name;
+                                      updatedItems[index].unitType =
+                                        categoryToUnitType(medicine.category);
+                                      setForm({ ...form, items: updatedItems });
+                                      setActiveDropdownIndex(null);
+                                    }}
+                                    className="w-full text-left px-4 py-2.5 text-sm hover:bg-blue-50/80 transition flex items-center justify-between group border-b border-slate-50 last:border-0 cursor-pointer"
+                                  >
+                                    <div>
+                                      <span className="font-semibold text-slate-800 group-hover:text-blue-600 block">
+                                        {medicine.name}
+                                      </span>
+                                      <span className="text-xs text-slate-400">
+                                        {medicine.category || "General"} {medicine.company ? `• ${medicine.company}` : ""}
+                                      </span>
+                                    </div>
+                                    <div className="text-right">
+                                      <span
+                                        className={`text-xs font-bold px-2.5 py-0.5 rounded-full ${
+                                          medicine.stock > 10
+                                            ? "bg-emerald-100 text-emerald-700"
+                                            : "bg-amber-100 text-amber-700"
+                                        }`}
+                                      >
+                                        Stock: {medicine.stock}
+                                      </span>
+                                    </div>
+                                  </button>
+                                ));
+                              })()}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="col-span-2">
+                          <label className="block text-xs font-bold text-slate-600 mb-1">
+                            Unit
+                          </label>
+                          <select
+                            value={item.unitType || "Tablet"}
+                            onChange={(e) => {
+                              const updatedItems = [...form.items];
+                              updatedItems[index].unitType = e.target.value;
+                              setForm({ ...form, items: updatedItems });
+                            }}
+                            className="w-full h-10 rounded-xl bg-slate-50 border border-slate-300 px-2 text-sm font-medium"
+                          >
+                            <option value="Tablet">Tablet</option>
+                            <option value="Strip">Strip</option>
+                            <option value="Capsule">Capsule</option>
+                            <option value="Injection">Injection</option>
+                            <option value="Ointment">Ointment</option>
+                            <option value="Other">Other</option>
+                          </select>
+                        </div>
+
+                        <div className="col-span-2">
+                          <label className="block text-xs font-bold text-slate-600 mb-1">
+                            Qty
+                          </label>
+                          <input
+                            type="number"
+                            min="1"
+                            placeholder="Qty"
+                            value={item.quantity}
+                            onChange={(e) => {
+                              const updatedItems = [...form.items];
+                              updatedItems[index].quantity =
+                                e.target.value === "" ? "" : Number(e.target.value);
+                              setForm({ ...form, items: updatedItems });
+                            }}
+                            className="w-full h-10 rounded-xl bg-slate-50 border border-slate-300 px-3 text-sm font-bold text-slate-900"
+                          />
+                        </div>
+
+                        <div className="col-span-3 flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setForm((prev) => ({
+                                ...prev,
+                                items: prev.items.filter((_, i) => i !== index),
+                              }));
+                            }}
+                            className="w-full h-10 rounded-xl bg-rose-500 hover:bg-rose-600 text-white font-bold text-xs transition cursor-pointer"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Billing Summary & Payment Inputs */}
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 pt-2">
+                  <div>
+                    <label className="block text-sm font-bold text-slate-800 mb-1.5">
+                      Payment Method
+                    </label>
+                    <select
+                      value={form.payment}
+                      onChange={(e) =>
+                        setForm({ ...form, payment: e.target.value })
+                      }
+                      className="w-full h-12 rounded-2xl bg-slate-50 border-2 border-slate-200 px-4 text-sm font-bold text-slate-800"
+                    >
+                      <option value="UPI / GPay">UPI / GPay (QR Code)</option>
+                      <option value="Cash">Cash Counter</option>
+                      <option value="Card">Debit / Credit Card</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-bold text-slate-800 mb-1.5">
+                      Discount (₹)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="0"
+                      value={form.discount}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          discount:
+                            e.target.value === "" ? "" : Number(e.target.value),
+                        })
+                      }
+                      className="w-full h-12 rounded-2xl bg-slate-50 border-2 border-slate-200 px-4 text-base"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-bold text-slate-800 mb-1.5">
+                      GST (₹)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="0"
+                      value={form.gst}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          gst:
+                            e.target.value === "" ? "" : Number(e.target.value),
+                        })
+                      }
+                      className="w-full h-12 rounded-2xl bg-slate-50 border-2 border-slate-200 px-4 text-base"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-bold text-slate-800 mb-1.5">
+                      Amount Paid (₹)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder={`Full (₹${calculatedGrandTotal.toFixed(0)})`}
+                      value={form.paidAmount}
+                      onChange={(e) =>
+                        setForm({ ...form, paidAmount: e.target.value })
+                      }
+                      className="w-full h-12 rounded-2xl bg-slate-50 border-2 border-slate-200 px-4 text-base font-extrabold text-emerald-700"
+                    />
+                  </div>
+                </div>
+
+                {/* Live Bill Summary Card */}
+                <div className="p-4 rounded-2xl bg-slate-950 text-white flex flex-wrap items-center justify-between gap-4 border border-slate-800">
+                  <div>
+                    <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider block">
+                      Grand Total
+                    </span>
+                    <span className="text-2xl font-black text-white">
+                      ₹{calculatedGrandTotal.toFixed(2)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider block">
+                      Paid Amount
+                    </span>
+                    <span className="text-xl font-extrabold text-emerald-400">
+                      ₹{effectivePaidAmount.toFixed(2)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider block">
+                      Balance Due (उधारी)
+                    </span>
+                    <span
+                      className={`text-xl font-black ${
+                        calculatedDueAmount > 0
+                          ? "text-rose-400 animate-pulse"
+                          : "text-slate-400"
+                      }`}
+                    >
+                      ₹{calculatedDueAmount.toFixed(2)}
+                    </span>
+                  </div>
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-bold text-slate-800 mb-1.5">
-                    Payment Method
-                  </label>
-                  <select
-                    value={form.payment}
-                    onChange={(e) =>
-                      setForm({ ...form, payment: e.target.value })
-                    }
-                    className="w-full h-12 rounded-2xl bg-slate-50 border-2 border-slate-200 px-4 text-base"
-                  >
-                    <option value="UPI / GPay">UPI / GPay (QR Code)</option>
-                    <option value="Cash">Cash Counter</option>
-                    <option value="Card">Debit / Credit Card</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-bold text-slate-800 mb-1.5">
-                    Discount
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    placeholder="Enter discount"
-                    value={form.discount}
-                    onChange={(e) =>
-                      setForm({
-                        ...form,
-                        discount:
-                          e.target.value === "" ? "" : Number(e.target.value),
-                      })
-                    }
-                    className="w-full h-12 rounded-2xl bg-slate-50 border-2 border-slate-200 px-4 text-base"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-bold text-slate-800 mb-1.5">
-                    GST
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    placeholder="Enter GST"
-                    value={form.gst}
-                    onChange={(e) =>
-                      setForm({
-                        ...form,
-                        gst:
-                          e.target.value === "" ? "" : Number(e.target.value),
-                      })
-                    }
-                    className="w-full h-12 rounded-2xl bg-slate-50 border-2 border-slate-200 px-4 text-base"
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-between items-center gap-3 pt-4 border-t border-slate-200">
+              {/* Modal Footer - Fixed */}
+              <div className="px-6 py-4 border-t border-slate-200 bg-white rounded-b-3xl flex justify-between items-center gap-3">
                 <button
                   type="button"
                   onClick={() => setShowPOSModal(false)}
-                  className="px-5 py-2.5 rounded-2xl border-2 border-slate-300 text-slate-700 font-bold text-sm"
+                  className="px-5 py-2.5 rounded-2xl border-2 border-slate-300 text-slate-700 font-bold text-sm hover:bg-slate-100 transition cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="px-6 py-2.5 rounded-2xl bg-emerald-600 text-white font-extrabold text-sm shadow disabled:opacity-60"
+                  className="px-6 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-sm shadow disabled:opacity-60 transition cursor-pointer flex items-center gap-2"
                 >
                   {submitting ? "Processing..." : "Complete Sale & Print"}
                 </button>
@@ -716,7 +883,7 @@ const Sales = () => {
       {/* Tax Receipt Modal */}
       {activeInvoice && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm font-sans">
-          <div className="w-full max-w-sm bg-white rounded-3xl p-8 shadow-2xl border border-slate-200 space-y-5">
+          <div className="w-full max-w-md bg-white rounded-3xl p-8 shadow-2xl border border-slate-200 space-y-5">
             <div className="text-center pb-4 border-b border-dashed border-slate-300 space-y-1">
               <h3 className="font-extrabold text-2xl text-slate-900">
                 MediStock Pharmacy
@@ -731,11 +898,19 @@ const Sales = () => {
 
             <div className="space-y-3 text-sm font-semibold">
               <div className="flex justify-between">
-                <span className="text-slate-400">Patient:</span>
+                <span className="text-slate-400">Patient / Customer:</span>
                 <span className="font-extrabold text-slate-900">
                   {activeInvoice.customer}
                 </span>
               </div>
+              {activeInvoice.customerMobile && (
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Mobile Number:</span>
+                  <span className="font-bold text-slate-700">
+                    {activeInvoice.customerMobile}
+                  </span>
+                </div>
+              )}
               <div className="flex justify-between items-center gap-4">
                 <div>
                   <span className="text-slate-400">Payment Mode:</span>
@@ -743,7 +918,7 @@ const Sales = () => {
                     <select
                       value={editPayment || activeInvoice.payment}
                       onChange={(e) => setEditPayment(e.target.value)}
-                      className="rounded-xl border px-3 py-1 text-sm font-bold"
+                      className="rounded-xl border border-slate-300 px-3 py-1 text-sm font-bold"
                     >
                       <option value="UPI / GPay">UPI / GPay</option>
                       <option value="Cash">Cash</option>
@@ -762,7 +937,6 @@ const Sales = () => {
                           activeInvoice.invoiceId,
                           newPayment,
                         );
-                        // update local sales state
                         setSales((prev) =>
                           prev.map((s) =>
                             s._id === activeInvoice.invoiceId
@@ -774,34 +948,106 @@ const Sales = () => {
                           ...activeInvoice,
                           payment: newPayment,
                         });
-                        toast.success("Payment updated");
+                        toast.success("Payment mode updated");
                       } catch (err) {
                         console.error(err);
-                        toast.error("Failed to update payment");
+                        toast.error("Failed to update payment mode");
                       }
                     }}
-                    className="ml-3 px-3 py-1 rounded-xl bg-blue-600 text-white font-bold"
+                    className="ml-3 px-3 py-1 rounded-xl bg-blue-600 text-white font-bold text-xs cursor-pointer"
                   >
-                    Save Payment
+                    Save Mode
                   </button>
                 </div>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400">Items:</span>
-                <span className="font-semibold text-slate-700 text-right">
+                <span className="font-semibold text-slate-700 text-right max-w-[200px]">
                   {activeInvoice.items}
                 </span>
               </div>
             </div>
 
-            <div className="pt-4 border-t border-slate-200 flex justify-between items-center">
-              <span className="font-bold text-slate-800 text-base">
-                Total Paid:
-              </span>
-              <span className="font-black text-emerald-600 text-2xl">
-                ₹{activeInvoice.total.toFixed(2)}
-              </span>
+            {/* Bill Amounts Breakdown */}
+            <div className="pt-4 border-t border-slate-200 space-y-2">
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-slate-500 font-bold">Total Bill:</span>
+                <span className="font-black text-slate-900">
+                  ₹{Number(activeInvoice.total || 0).toFixed(2)}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-slate-500 font-bold">Amount Paid:</span>
+                <span className="font-black text-emerald-600">
+                  ₹{Number(activeInvoice.paidAmount || 0).toFixed(2)}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-sm pt-1 border-t border-slate-100">
+                <span className="text-slate-700 font-extrabold">Balance Due (उधारी):</span>
+                <span
+                  className={`font-black text-lg ${
+                    Number(activeInvoice.dueAmount || 0) > 0
+                      ? "text-rose-600"
+                      : "text-slate-400"
+                  }`}
+                >
+                  ₹{Number(activeInvoice.dueAmount || 0).toFixed(2)}
+                </span>
+              </div>
             </div>
+
+            {/* Due Payment Collect Action */}
+            {Number(activeInvoice.dueAmount || 0) > 0 && (
+              <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 space-y-3">
+                <span className="block text-xs font-bold text-amber-800">
+                  Collect Due Payment (बकाया राशि जमा करें)
+                </span>
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    min="1"
+                    max={activeInvoice.dueAmount}
+                    placeholder={`Max ₹${activeInvoice.dueAmount}`}
+                    value={duePayAmount}
+                    onChange={(e) => setDuePayAmount(e.target.value)}
+                    className="w-full h-10 rounded-xl bg-white border border-amber-300 px-3 text-sm font-bold text-slate-900"
+                  />
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!duePayAmount || Number(duePayAmount) <= 0) {
+                        return toast.error("Enter valid payment amount");
+                      }
+                      try {
+                        const res = await updateInvoiceDue(
+                          activeInvoice.invoiceId,
+                          Number(duePayAmount),
+                        );
+                        const updatedInv = res.data;
+                        setSales((prev) =>
+                          prev.map((s) =>
+                            s._id === activeInvoice.invoiceId ? updatedInv : s,
+                          ),
+                        );
+                        setActiveInvoice({
+                          ...activeInvoice,
+                          paidAmount: updatedInv.paidAmount,
+                          dueAmount: updatedInv.dueAmount,
+                        });
+                        setDuePayAmount("");
+                        toast.success("Due payment recorded successfully!");
+                      } catch (err) {
+                        console.error(err);
+                        toast.error("Failed to record due payment");
+                      }
+                    }}
+                    className="px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold text-xs hover:bg-emerald-700 transition cursor-pointer shrink-0"
+                  >
+                    Receive ₹
+                  </button>
+                </div>
+              </div>
+            )}
 
             <button
               onClick={async () => {
@@ -810,7 +1056,7 @@ const Sales = () => {
                 }
                 setActiveInvoice(null);
               }}
-              className="w-full h-12 rounded-2xl bg-slate-900 text-white font-extrabold text-sm flex items-center justify-center gap-2 mt-2 cursor-pointer"
+              className="w-full h-12 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-sm flex items-center justify-center gap-2 mt-2 cursor-pointer transition"
             >
               <FaPrint />
               <span>Close & Print Receipt</span>

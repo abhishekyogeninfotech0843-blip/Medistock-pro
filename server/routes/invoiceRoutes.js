@@ -10,6 +10,7 @@ const {
   updatePayment,
   downloadInvoicePDF,
   searchInvoices,
+  updateInvoiceDue,
 } = require("../controllers/invoiceController");
 
 // ==========================
@@ -37,5 +38,10 @@ router.get("/pdf/:id", protect, downloadInvoicePDF);
 // Update Invoice Payment
 // ==========================
 router.patch("/:id/payment", protect, updatePayment);
+
+// ==========================
+// Update Invoice Due Payment
+// ==========================
+router.patch("/:id/due", protect, updateInvoiceDue);
 
 module.exports = router;

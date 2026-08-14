@@ -15,14 +15,19 @@ import {
   FaPills,
   FaCheckCircle,
   FaSpinner,
+  FaUser,
+  FaUserShield,
 } from "react-icons/fa";
-import { loginUser } from "../services/authService";
+import { loginUser, registerUser } from "../services/authService";
 
 const Login = () => {
   const navigate = useNavigate();
 
+  const [isRegister, setIsRegister] = useState(false);
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [role, setRole] = useState("staff");
   const [rememberMe, setRememberMe] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -42,11 +47,43 @@ const Login = () => {
       localStorage.setItem("token", data.token);
       localStorage.setItem("user", JSON.stringify(data.user));
 
-      toast.success(`Welcome back, ${data.user?.name || "Admin"}!`);
+      toast.success(`Welcome back, ${data.user?.name || "User"}!`);
       navigate("/dashboard", { replace: true });
     } catch (error) {
       toast.error(
         error.response?.data?.message || "Invalid credentials. Please check your email and password."
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRegister = async (e) => {
+    e?.preventDefault();
+
+    if (!name.trim() || !email.trim() || !password) {
+      toast.error("Please enter Name, Email address, and Password.");
+      return;
+    }
+
+    if (password.length < 4) {
+      toast.error("Password must be at least 4 characters long.");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      await registerUser(name.trim(), email.trim(), password, role);
+      toast.success("Account created successfully! Logging you in...");
+
+      // Automatic login after registration
+      const data = await loginUser(email.trim(), password);
+      localStorage.setItem("token", data.token);
+      localStorage.setItem("user", JSON.stringify(data.user));
+      navigate("/dashboard", { replace: true });
+    } catch (error) {
+      toast.error(
+        error.response?.data?.message || "Registration failed. Please try again."
       );
     } finally {
       setLoading(false);
@@ -131,27 +168,77 @@ const Login = () => {
         </div>
 
         {/* Right Column: Clean White Form (5 Columns) */}
-        <div className="lg:col-span-5 p-10 sm:p-14 bg-white flex flex-col justify-center">
-          <div className="w-full space-y-8">
-            {/* Title Header */}
-            <div className="space-y-2">
-              <h3 className="text-3xl font-extrabold text-slate-900 tracking-normal">
+        <div className="lg:col-span-5 p-8 sm:p-12 bg-white flex flex-col justify-center">
+          <div className="w-full space-y-6">
+            {/* Mode Switcher Tabs */}
+            <div className="flex bg-slate-100 p-1.5 rounded-2xl border border-slate-200">
+              <button
+                type="button"
+                onClick={() => setIsRegister(false)}
+                className={`flex-1 py-2.5 text-sm font-extrabold rounded-xl transition ${
+                  !isRegister
+                    ? "bg-white text-blue-600 shadow-sm"
+                    : "text-slate-500 hover:text-slate-800"
+                }`}
+              >
                 Sign In
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsRegister(true)}
+                className={`flex-1 py-2.5 text-sm font-extrabold rounded-xl transition ${
+                  isRegister
+                    ? "bg-white text-blue-600 shadow-sm"
+                    : "text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                Create Account
+              </button>
+            </div>
+
+            {/* Title Header */}
+            <div className="space-y-1">
+              <h3 className="text-3xl font-extrabold text-slate-900 tracking-normal">
+                {isRegister ? "Create Account" : "Sign In"}
               </h3>
-              <p className="text-base text-slate-600 font-medium">
-                Enter your account credentials to access your pharmacy dashboard.
+              <p className="text-sm text-slate-600 font-medium">
+                {isRegister
+                  ? "Register a new user account to manage pharmacy operations."
+                  : "Enter your account credentials to access your pharmacy dashboard."}
               </p>
             </div>
 
             {/* Form */}
-            <form onSubmit={handleLogin} className="space-y-6">
+            <form onSubmit={isRegister ? handleRegister : handleLogin} className="space-y-4">
+              {/* Full Name Input (Register Only) */}
+              {isRegister && (
+                <div className="space-y-1.5">
+                  <label className="block text-sm font-bold text-slate-800">
+                    Full Name
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 text-lg">
+                      <FaUser />
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="e.g. Abhishek Sharma"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      required={isRegister}
+                      className="w-full h-12 rounded-2xl bg-slate-50 border-2 border-slate-300 pl-11 pr-4 text-base text-slate-900 placeholder-slate-400 outline-none transition focus:border-blue-600 focus:bg-white focus:ring-4 focus:ring-blue-100 font-semibold"
+                    />
+                  </div>
+                </div>
+              )}
+
               {/* Email Input */}
-              <div className="space-y-2">
-                <label className="block text-base font-bold text-slate-800">
+              <div className="space-y-1.5">
+                <label className="block text-sm font-bold text-slate-800">
                   Email Address
                 </label>
                 <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-4.5 flex items-center pointer-events-none text-slate-400 text-xl">
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 text-lg">
                     <FaEnvelope />
                   </div>
                   <input
@@ -159,18 +246,19 @@ const Login = () => {
                     placeholder="admin@gmail.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="w-full h-14 rounded-2xl bg-slate-50 border-2 border-slate-300 pl-12 pr-4 text-base text-slate-900 placeholder-slate-400 outline-none transition focus:border-blue-600 focus:bg-white focus:ring-4 focus:ring-blue-100 font-semibold"
+                    required
+                    className="w-full h-12 rounded-2xl bg-slate-50 border-2 border-slate-300 pl-11 pr-4 text-base text-slate-900 placeholder-slate-400 outline-none transition focus:border-blue-600 focus:bg-white focus:ring-4 focus:ring-blue-100 font-semibold"
                   />
                 </div>
               </div>
 
               {/* Password Input */}
-              <div className="space-y-2">
-                <label className="block text-base font-bold text-slate-800">
+              <div className="space-y-1.5">
+                <label className="block text-sm font-bold text-slate-800">
                   Password
                 </label>
                 <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-4.5 flex items-center pointer-events-none text-slate-400 text-xl">
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 text-lg">
                     <FaLock />
                   </div>
                   <input
@@ -178,64 +266,116 @@ const Login = () => {
                     placeholder="••••••••"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full h-14 rounded-2xl bg-slate-50 border-2 border-slate-300 pl-12 pr-12 text-base text-slate-900 placeholder-slate-400 outline-none transition focus:border-blue-600 focus:bg-white focus:ring-4 focus:ring-blue-100 font-semibold"
+                    required
+                    className="w-full h-12 rounded-2xl bg-slate-50 border-2 border-slate-300 pl-11 pr-11 text-base text-slate-900 placeholder-slate-400 outline-none transition focus:border-blue-600 focus:bg-white focus:ring-4 focus:ring-blue-100 font-semibold"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute inset-y-0 right-0 pr-4.5 flex items-center text-slate-400 hover:text-slate-700 text-xl transition-colors"
+                    className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 hover:text-slate-700 text-lg transition-colors cursor-pointer"
                   >
                     {showPassword ? <FaEyeSlash /> : <FaEye />}
                   </button>
                 </div>
               </div>
 
-              {/* Remember Me & Forgot Password Row */}
-              <div className="flex items-center justify-between text-base pt-1">
-                <label className="flex items-center gap-3 cursor-pointer font-semibold text-slate-700 select-none">
-                  <input
-                    type="checkbox"
-                    checked={rememberMe}
-                    onChange={(e) => setRememberMe(e.target.checked)}
-                    className="h-5 w-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                  />
-                  <span>Remember me</span>
-                </label>
+              {/* Role Selection Input (Register Only) */}
+              {isRegister && (
+                <div className="space-y-1.5">
+                  <label className="block text-sm font-bold text-slate-800">
+                    Account Role
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 text-lg">
+                      <FaUserShield />
+                    </div>
+                    <select
+                      value={role}
+                      onChange={(e) => setRole(e.target.value)}
+                      className="w-full h-12 rounded-2xl bg-slate-50 border-2 border-slate-300 pl-11 pr-4 text-base text-slate-900 outline-none transition focus:border-blue-600 focus:bg-white focus:ring-4 focus:ring-blue-100 font-semibold"
+                    >
+                      <option value="staff">Staff / Pharmacist</option>
+                      <option value="admin">Administrator</option>
+                    </select>
+                  </div>
+                </div>
+              )}
 
-                <a
-                  href="#forgot"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    toast("Please contact your system administrator to reset password.");
-                  }}
-                  className="font-bold text-blue-600 hover:text-blue-700 transition hover:underline"
-                >
-                  Forgot password?
-                </a>
-              </div>
+              {/* Remember Me & Forgot Password Row (Login Only) */}
+              {!isRegister && (
+                <div className="flex items-center justify-between text-sm pt-1">
+                  <label className="flex items-center gap-2.5 cursor-pointer font-semibold text-slate-700 select-none">
+                    <input
+                      type="checkbox"
+                      checked={rememberMe}
+                      onChange={(e) => setRememberMe(e.target.checked)}
+                      className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                    />
+                    <span>Remember me</span>
+                  </label>
+
+                  <a
+                    href="#forgot"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      toast("Please contact your system administrator to reset password.");
+                    }}
+                    className="font-bold text-blue-600 hover:text-blue-700 transition hover:underline"
+                  >
+                    Forgot password?
+                  </a>
+                </div>
+              )}
 
               {/* Submit Button */}
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full h-14 rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-sky-600 hover:from-blue-700 hover:to-indigo-700 text-white font-extrabold text-lg shadow-xl shadow-blue-600/30 transition-all duration-200 flex items-center justify-center gap-3 active:scale-[0.99] disabled:opacity-70 disabled:cursor-not-allowed mt-4"
+                className="w-full h-13 rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-sky-600 hover:from-blue-700 hover:to-indigo-700 text-white font-extrabold text-base shadow-xl shadow-blue-600/30 transition-all duration-200 flex items-center justify-center gap-2.5 active:scale-[0.99] disabled:opacity-70 disabled:cursor-not-allowed cursor-pointer mt-2"
               >
                 {loading ? (
                   <div className="flex items-center gap-2">
-                    <FaSpinner className="animate-spin text-xl" />
-                    <span>Signing In...</span>
+                    <FaSpinner className="animate-spin text-lg" />
+                    <span>{isRegister ? "Creating Account..." : "Signing In..."}</span>
                   </div>
                 ) : (
                   <>
-                    <span>Sign In to Dashboard</span>
-                    <FaArrowRight className="text-base" />
+                    <span>{isRegister ? "Create Account & Sign In" : "Sign In to Dashboard"}</span>
+                    <FaArrowRight className="text-sm" />
                   </>
                 )}
               </button>
             </form>
 
+            {/* Toggle Link */}
+            <div className="text-center text-sm font-semibold text-slate-600 pt-2 border-t border-slate-100">
+              {isRegister ? (
+                <p>
+                  Already have an account?{" "}
+                  <button
+                    type="button"
+                    onClick={() => setIsRegister(false)}
+                    className="font-extrabold text-blue-600 hover:text-blue-700 transition hover:underline cursor-pointer"
+                  >
+                    Sign In
+                  </button>
+                </p>
+              ) : (
+                <p>
+                  New to MediStock Pro?{" "}
+                  <button
+                    type="button"
+                    onClick={() => setIsRegister(true)}
+                    className="font-extrabold text-blue-600 hover:text-blue-700 transition hover:underline cursor-pointer"
+                  >
+                    Create Account
+                  </button>
+                </p>
+              )}
+            </div>
+
             {/* Footer Copyright Note */}
-            <p className="text-center text-xs text-slate-400 font-medium pt-4 border-t border-slate-100">
+            <p className="text-center text-xs text-slate-400 font-medium pt-2">
               MediStock Pro &bull; Official Pharmacy Management System
             </p>
           </div>

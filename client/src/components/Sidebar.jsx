@@ -16,6 +16,7 @@ import {
   FaUserMd,
   FaHeartbeat,
   FaVideo,
+  FaWallet,
 } from "react-icons/fa";
 
 const Sidebar = () => {
@@ -26,10 +27,10 @@ const Sidebar = () => {
   const user = storedUser
     ? JSON.parse(storedUser)
     : {
-        name: "Abhishek Admin",
-        role: "Pharmacy Manager",
-        email: "admin@gmail.com",
-      };
+      name: "Abhishek Admin",
+      role: "Pharmacy Manager",
+      email: "admin@gmail.com",
+    };
 
   const handleLogout = () => {
     localStorage.removeItem("token");
@@ -78,6 +79,11 @@ const Sidebar = () => {
       path: "/reports",
       icon: <FaChartBar />,
     },
+    {
+      name: "Balance",
+      path: "/balance",
+      icon: <FaWallet />,
+    },
   ];
 
   return (
@@ -116,11 +122,10 @@ const Sidebar = () => {
               >
                 <Link
                   to={item.path}
-                  className={`relative flex items-center gap-3.5 px-4 py-3.5 rounded-xl font-bold text-sm transition-all duration-200 ${
-                    active
+                  className={`relative flex items-center gap-3.5 px-4 py-3.5 rounded-xl font-bold text-sm transition-all duration-200 ${active
                       ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-600/30 font-extrabold"
                       : "text-slate-400 hover:text-white hover:bg-slate-800/70"
-                  }`}
+                    }`}
                 >
                   <span
                     className={`text-xl transition-colors ${active ? "text-white" : "text-slate-400"}`}
