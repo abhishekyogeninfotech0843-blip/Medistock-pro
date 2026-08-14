@@ -277,10 +277,14 @@ const Sales = () => {
 
   const filteredByDate = selectedDate
     ? filteredBySearch.filter((s) => {
-        const invoiceDate = s.invoiceDate ? new Date(s.invoiceDate) : null;
-        return (
-          invoiceDate && invoiceDate.toISOString().slice(0, 10) === selectedDate
-        );
+        const dateVal = s.invoiceDate || s.createdAt;
+        if (!dateVal) return false;
+        const d = new Date(dateVal);
+        if (isNaN(d.getTime())) return false;
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, "0");
+        const day = String(d.getDate()).padStart(2, "0");
+        return `${year}-${month}-${day}` === selectedDate;
       })
     : filteredBySearch;
 
@@ -382,22 +386,28 @@ const Sales = () => {
       </div>
 
       {/* Payment Filter Pills */}
-      <div className="flex gap-2 mt-3 mb-3">
+      <div className="flex gap-2 mt-3 mb-3 flex-wrap">
         {[
-          { id: "ALL", label: `All (${sales.length})` },
+          { id: "ALL", label: `All (${summarySales.length})` },
           {
             id: "UPI / GPay",
-            label: `UPI (${sales.filter(s => (s.payment||"").includes("UPI")).length})`,
+            label: `UPI (${summarySales.filter(s => (s.payment || "").toLowerCase().includes("upi")).length})`,
           },
-          { id: "Cash", label: `Cash (${sales.filter(s => (s.payment||"").includes("Cash")).length})` },
-          { id: "Card", label: `Card (${sales.filter(s => (s.payment||"").includes("Card")).length})` },
+          {
+            id: "Cash",
+            label: `Cash (${summarySales.filter(s => (s.payment || "").toLowerCase().includes("cash")).length})`,
+          },
+          {
+            id: "Card",
+            label: `Card (${summarySales.filter(s => (s.payment || "").toLowerCase().includes("card")).length})`,
+          },
         ].map((p) => (
           <button
             key={p.id}
             onClick={() => setPaymentFilter(p.id)}
-            className={`px-3 py-1.5 rounded-xl border text-sm font-bold ${
+            className={`px-3.5 py-1.5 rounded-xl border text-sm font-bold transition cursor-pointer ${
               paymentFilter === p.id
-                ? "bg-blue-50 text-blue-700 border-blue-300"
+                ? "bg-blue-50 text-blue-700 border-blue-300 shadow-sm"
                 : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
             }`}
           >
@@ -425,8 +435,17 @@ const Sales = () => {
               type="date"
               value={selectedDate}
               onChange={(e) => setSelectedDate(e.target.value)}
-              className="h-12 rounded-2xl bg-slate-50 border-2 border-slate-200 px-4 text-base text-slate-900 outline-none transition focus:border-blue-600 focus:bg-white focus:ring-4 focus:ring-blue-100"
+              className="h-12 rounded-2xl bg-slate-50 border-2 border-slate-200 px-4 text-base text-slate-900 outline-none transition focus:border-blue-600 focus:bg-white focus:ring-4 focus:ring-blue-100 font-bold"
             />
+            {selectedDate && (
+              <button
+                type="button"
+                onClick={() => setSelectedDate("")}
+                className="px-3.5 py-2.5 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition cursor-pointer"
+              >
+                All Dates
+              </button>
+            )}
           </div>
         </div>
       </div>
