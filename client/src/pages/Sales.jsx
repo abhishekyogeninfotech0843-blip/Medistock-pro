@@ -288,24 +288,46 @@ const Sales = () => {
       })
     : filteredBySearch;
 
-  const paymentFiltered =
-    paymentFilter && paymentFilter !== "ALL"
-      ? filteredByDate.filter(
-          (s) => (s.payment || "UPI / GPay") === paymentFilter,
-        )
-      : filteredByDate;
+const matchPaymentType = (paymentStr, filterId) => {
+  if (!filterId || filterId === "ALL") return true;
+  const p = (paymentStr || "").toString().toLowerCase();
+  const f = filterId.toLowerCase();
+
+  if (f.includes("cash")) {
+    return p.includes("cash");
+  }
+  if (f.includes("card")) {
+    return p.includes("card") || p.includes("debit") || p.includes("credit");
+  }
+  if (f.includes("upi") || f.includes("gpay")) {
+    return (
+      p.includes("upi") ||
+      p.includes("gpay") ||
+      p.includes("qr") ||
+      (!p.includes("cash") && !p.includes("card"))
+    );
+  }
+  return p === f;
+};
 
   const summarySales = selectedDate ? filteredByDate : filteredBySearch;
 
-  // Compute payment counts for current date/search scope
-  const paymentCounts = (summarySales || []).reduce(
-    (acc, s) => {
-      const p = s.payment || "UPI / GPay";
-      acc[p] = (acc[p] || 0) + 1;
-      return acc;
-    },
-    { "UPI / GPay": 0, Cash: 0, Card: 0 },
+  const paymentFiltered = summarySales.filter((s) =>
+    matchPaymentType(s.payment, paymentFilter)
   );
+
+  // Compute payment counts for current date/search scope
+  const paymentCounts = {
+    "UPI / GPay": (summarySales || []).filter((s) =>
+      matchPaymentType(s.payment, "UPI / GPay")
+    ).length,
+    Cash: (summarySales || []).filter((s) =>
+      matchPaymentType(s.payment, "Cash")
+    ).length,
+    Card: (summarySales || []).filter((s) =>
+      matchPaymentType(s.payment, "Card")
+    ).length,
+  };
 
   return (
     <AppLayout>
@@ -391,15 +413,15 @@ const Sales = () => {
           { id: "ALL", label: `All (${summarySales.length})` },
           {
             id: "UPI / GPay",
-            label: `UPI (${summarySales.filter(s => (s.payment || "").toLowerCase().includes("upi")).length})`,
+            label: `UPI (${paymentCounts["UPI / GPay"]})`,
           },
           {
             id: "Cash",
-            label: `Cash (${summarySales.filter(s => (s.payment || "").toLowerCase().includes("cash")).length})`,
+            label: `Cash (${paymentCounts["Cash"]})`,
           },
           {
             id: "Card",
-            label: `Card (${summarySales.filter(s => (s.payment || "").toLowerCase().includes("card")).length})`,
+            label: `Card (${paymentCounts["Card"]})`,
           },
         ].map((p) => (
           <button
@@ -546,6 +568,13 @@ const Sales = () => {
                   </tr>
                 );
               })}
+              {paymentFiltered.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-6 py-12 text-center text-slate-500 font-semibold">
+                    No {paymentFilter !== "ALL" ? paymentFilter : ""} transactions found {selectedDate ? `for ${selectedDate}` : ""}.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         )}
