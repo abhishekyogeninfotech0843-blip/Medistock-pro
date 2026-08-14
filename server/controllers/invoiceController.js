@@ -302,9 +302,26 @@ const downloadInvoicePDF = async (req, res) => {
     doc.text("Medicine                      Qty    Price    Total");
     doc.text("-------------------------------------------------------------");
 
-    // Items
-    invoice.items.forEach((item) => {
-      const line = `${item.medicine.name.padEnd(28, " ")} ${String(item.quantity).padStart(3, " ")}    ${String(item.sellingPrice).padStart(6, " ")}    ${String(item.total).padStart(6, " ")}`;
+    // Items (Consolidated)
+    const pdfMap = new Map();
+    (invoice.items || []).forEach((item) => {
+      const name = item.medicine?.name || "Medicine";
+      const key = `${name}___${item.unitType || "Tablet"}`;
+      const qty = Number(item.displayQuantity || item.quantity || 1);
+      const price = Number(item.sellingPrice || 0);
+      const total = Number(item.total || qty * price);
+
+      if (pdfMap.has(key)) {
+        const prev = pdfMap.get(key);
+        prev.qty += qty;
+        prev.total += total;
+      } else {
+        pdfMap.set(key, { name, qty, price, total });
+      }
+    });
+
+    Array.from(pdfMap.values()).forEach((item) => {
+      const line = `${item.name.padEnd(28, " ")} ${String(item.qty).padStart(3, " ")}    ${String(item.price).padStart(6, " ")}    ${String(item.total).padStart(6, " ")}`;
       doc.text(line);
     });
 

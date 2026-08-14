@@ -27,6 +27,37 @@ const categoryToUnitType = (category) => {
   if (text.includes("tablet")) return "Tablet";
   return "Other";
 };
+
+const formatInvoiceItems = (items, fallbackMedicine, fallbackQty) => {
+  if (Array.isArray(items) && items.length > 0) {
+    const map = new Map();
+    items.forEach((item) => {
+      const name = item.medicine?.name || item.name || "Medicine";
+      const unit = item.unitType || "Tablet";
+      const qty = Number(item.displayQuantity || item.quantity || 1);
+      const key = `${name}___${unit}`;
+
+      if (map.has(key)) {
+        map.set(key, map.get(key) + qty);
+      } else {
+        map.set(key, qty);
+      }
+    });
+
+    return Array.from(map.entries())
+      .map(([key, qty]) => {
+        const [name, unit] = key.split("___");
+        return `${name} - ${qty} ${unit}`;
+      })
+      .join(", ");
+  }
+
+  if (fallbackMedicine?.name) {
+    return `${fallbackMedicine.name} x${fallbackQty || 1}`;
+  }
+
+  return "Medicine item";
+};
 import toast, { Toaster } from "react-hot-toast";
 import {
   createInvoice,
@@ -154,14 +185,7 @@ const Sales = () => {
         id: createdInvoice.invoiceNumber,
         customer: createdInvoice.customerName,
         customerMobile: createdInvoice.customerMobile,
-        items: createdInvoice.items
-          .map(
-            (item) =>
-              `${item.medicine.name} - ${item.displayQuantity || item.quantity} ${
-                item.unitType || "Tablet"
-              }`,
-          )
-          .join(", "),
+        items: formatInvoiceItems(createdInvoice.items),
         total: createdInvoice.grandTotal,
         paidAmount: createdInvoice.paidAmount ?? createdInvoice.grandTotal,
         dueAmount: createdInvoice.dueAmount ?? 0,
@@ -450,15 +474,7 @@ const Sales = () => {
                       </div>
                     </td>
                     <td className="px-6 py-5 text-slate-600 text-sm font-semibold">
-                      {inv.items
-                        ? inv.items
-                            .map((item) =>
-                              item.medicine?.name
-                                ? `${item.medicine.name} - ${item.displayQuantity || item.quantity} ${item.unitType || "Tablet"}`
-                                : "Medicine item",
-                            )
-                            .join(", ")
-                        : `${inv.medicine?.name || "Medicine"} x${inv.quantity || 1}`}
+                      {formatInvoiceItems(inv.items, inv.medicine, inv.quantity)}
                     </td>
                     <td className="px-6 py-5">
                       <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold bg-slate-100 text-slate-800">
@@ -488,16 +504,7 @@ const Sales = () => {
                             id: inv.invoiceNumber || inv.id,
                             customer: inv.customerName || inv.customer,
                             customerMobile: inv.customerMobile || "",
-                            items:
-                              inv.items
-                                ? inv.items
-                                    .map((item) =>
-                                      item.medicine?.name
-                                        ? `${item.medicine.name} - ${item.displayQuantity || item.quantity} ${item.unitType || "Tablet"}`
-                                        : "Medicine item",
-                                    )
-                                    .join(", ")
-                                : `${inv.medicine?.name || "Medicine"} x${inv.quantity || 1}`,
+                            items: formatInvoiceItems(inv.items, inv.medicine, inv.quantity),
                             total: totalAmt,
                             paidAmount: paidAmt,
                             dueAmount: dueAmt,
