@@ -1,6 +1,6 @@
-import React, { useState } from "react";
+import React from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import toast from "react-hot-toast";
 import {
   FaTachometerAlt,
@@ -17,9 +17,10 @@ import {
   FaHeartbeat,
   FaVideo,
   FaWallet,
+  FaTimes,
 } from "react-icons/fa";
 
-const Sidebar = () => {
+const Sidebar = ({ mobileOpen = false, onCloseMobile = () => {} }) => {
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -27,10 +28,10 @@ const Sidebar = () => {
   const user = storedUser
     ? JSON.parse(storedUser)
     : {
-      name: "Abhishek Admin",
-      role: "Pharmacy Manager",
-      email: "admin@gmail.com",
-    };
+        name: "Abhishek Admin",
+        role: "Pharmacy Manager",
+        email: "admin@gmail.com",
+      };
 
   const handleLogout = () => {
     localStorage.removeItem("token");
@@ -86,12 +87,16 @@ const Sidebar = () => {
     },
   ];
 
-  return (
-    <aside className="w-72 min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 border-r border-slate-800 text-slate-300 flex flex-col justify-between z-30 font-sans shadow-2xl">
+  const sidebarContent = (
+    <aside className="w-72 h-full min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 border-r border-slate-800 text-slate-300 flex flex-col justify-between z-30 font-sans shadow-2xl overflow-y-auto">
       {/* Brand Header */}
       <div>
         <div className="p-6 border-b border-slate-800/80 flex items-center justify-between">
-          <Link to="/dashboard" className="flex items-center gap-3.5">
+          <Link
+            to="/dashboard"
+            onClick={onCloseMobile}
+            className="flex items-center gap-3.5"
+          >
             <div className="h-12 w-12 rounded-2xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-sky-400 flex items-center justify-center text-white text-2xl shadow-lg shadow-blue-500/25">
               <FaHospitalSymbol />
             </div>
@@ -107,6 +112,15 @@ const Sidebar = () => {
               </span>
             </div>
           </Link>
+
+          {/* Close button for Mobile Drawer */}
+          <button
+            onClick={onCloseMobile}
+            className="lg:hidden p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition"
+            aria-label="Close Sidebar"
+          >
+            <FaTimes className="text-xl" />
+          </button>
         </div>
 
         {/* Navigation Items */}
@@ -122,13 +136,17 @@ const Sidebar = () => {
               >
                 <Link
                   to={item.path}
-                  className={`relative flex items-center gap-3.5 px-4 py-3.5 rounded-xl font-bold text-sm transition-all duration-200 ${active
+                  onClick={onCloseMobile}
+                  className={`relative flex items-center gap-3.5 px-4 py-3.5 rounded-xl font-bold text-sm transition-all duration-200 ${
+                    active
                       ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-600/30 font-extrabold"
                       : "text-slate-400 hover:text-white hover:bg-slate-800/70"
-                    }`}
+                  }`}
                 >
                   <span
-                    className={`text-xl transition-colors ${active ? "text-white" : "text-slate-400"}`}
+                    className={`text-xl transition-colors ${
+                      active ? "text-white" : "text-slate-400"
+                    }`}
                   >
                     {item.icon}
                   </span>
@@ -261,8 +279,11 @@ const Sidebar = () => {
         </div>
 
         <button
-          onClick={handleLogout}
-          className="flex w-full items-center justify-center gap-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 px-4 py-3 text-sm font-bold text-rose-400 hover:bg-rose-600 hover:text-white transition-all duration-200 group shadow-sm active:scale-98"
+          onClick={() => {
+            onCloseMobile();
+            handleLogout();
+          }}
+          className="flex w-full items-center justify-center gap-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 px-4 py-3 text-sm font-bold text-rose-400 hover:bg-rose-600 hover:text-white transition-all duration-200 group shadow-sm active:scale-98 cursor-pointer"
         >
           <FaSignOutAlt className="text-base group-hover:rotate-12 transition-transform" />
           <span>Sign Out</span>
@@ -273,6 +294,39 @@ const Sidebar = () => {
         </p>
       </div>
     </aside>
+  );
+
+  return (
+    <>
+      {/* Desktop Fixed Sidebar */}
+      <div className="hidden lg:block shrink-0 sticky top-0 h-screen">
+        {sidebarContent}
+      </div>
+
+      {/* Mobile Drawer Sidebar */}
+      <AnimatePresence>
+        {mobileOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={onCloseMobile}
+              className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-40 lg:hidden"
+            />
+            <motion.div
+              initial={{ x: "-100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "-100%" }}
+              transition={{ type: "spring", damping: 25, stiffness: 200 }}
+              className="fixed inset-y-0 left-0 z-50 h-full lg:hidden"
+            >
+              {sidebarContent}
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+    </>
   );
 };
 

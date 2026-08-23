@@ -27,6 +27,37 @@ const categoryToUnitType = (category) => {
   if (text.includes("tablet")) return "Tablet";
   return "Other";
 };
+
+const formatInvoiceItems = (items, fallbackMedicine, fallbackQty) => {
+  if (Array.isArray(items) && items.length > 0) {
+    const map = new Map();
+    items.forEach((item) => {
+      const name = item.medicine?.name || item.name || "Medicine";
+      const unit = item.unitType || "Tablet";
+      const qty = Number(item.displayQuantity || item.quantity || 1);
+      const key = `${name}___${unit}`;
+
+      if (map.has(key)) {
+        map.set(key, map.get(key) + qty);
+      } else {
+        map.set(key, qty);
+      }
+    });
+
+    return Array.from(map.entries())
+      .map(([key, qty]) => {
+        const [name, unit] = key.split("___");
+        return `${name} - ${qty} ${unit}`;
+      })
+      .join(", ");
+  }
+
+  if (fallbackMedicine?.name) {
+    return `${fallbackMedicine.name} x${fallbackQty || 1}`;
+  }
+
+  return "Medicine item";
+};
 import toast, { Toaster } from "react-hot-toast";
 import {
   createInvoice,
@@ -106,12 +137,24 @@ const Sales = () => {
       return;
     }
 
+    // Consolidate any duplicate medicine selections
+    const consolidatedMap = new Map();
+    validItems.forEach((item) => {
+      if (consolidatedMap.has(item.medicine)) {
+        const existing = consolidatedMap.get(item.medicine);
+        existing.quantity = Number(existing.quantity) + Number(item.quantity);
+      } else {
+        consolidatedMap.set(item.medicine, { ...item });
+      }
+    });
+    const consolidatedItems = Array.from(consolidatedMap.values());
+
     try {
       setSubmitting(true);
       const payload = {
         customerName: form.customer || "Walk-in Patient",
         customerMobile: form.customerMobile || "",
-        items: validItems.map((item) => {
+        items: consolidatedItems.map((item) => {
           const medicine = medicines.find((m) => m._id === item.medicine);
           const packSize = Number(medicine?.packSize || 10);
           return {
@@ -142,14 +185,7 @@ const Sales = () => {
         id: createdInvoice.invoiceNumber,
         customer: createdInvoice.customerName,
         customerMobile: createdInvoice.customerMobile,
-        items: createdInvoice.items
-          .map(
-            (item) =>
-              `${item.medicine.name} - ${item.displayQuantity || item.quantity} ${
-                item.unitType || "Tablet"
-              }`,
-          )
-          .join(", "),
+        items: formatInvoiceItems(createdInvoice.items),
         total: createdInvoice.grandTotal,
         paidAmount: createdInvoice.paidAmount ?? createdInvoice.grandTotal,
         dueAmount: createdInvoice.dueAmount ?? 0,
@@ -241,31 +277,57 @@ const Sales = () => {
 
   const filteredByDate = selectedDate
     ? filteredBySearch.filter((s) => {
-        const invoiceDate = s.invoiceDate ? new Date(s.invoiceDate) : null;
-        return (
-          invoiceDate && invoiceDate.toISOString().slice(0, 10) === selectedDate
-        );
+        const dateVal = s.invoiceDate || s.createdAt;
+        if (!dateVal) return false;
+        const d = new Date(dateVal);
+        if (isNaN(d.getTime())) return false;
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, "0");
+        const day = String(d.getDate()).padStart(2, "0");
+        return `${year}-${month}-${day}` === selectedDate;
       })
     : filteredBySearch;
 
-  const paymentFiltered =
-    paymentFilter && paymentFilter !== "ALL"
-      ? filteredByDate.filter(
-          (s) => (s.payment || "UPI / GPay") === paymentFilter,
-        )
-      : filteredByDate;
+const matchPaymentType = (paymentStr, filterId) => {
+  if (!filterId || filterId === "ALL") return true;
+  const p = (paymentStr || "").toString().toLowerCase();
+  const f = filterId.toLowerCase();
+
+  if (f.includes("cash")) {
+    return p.includes("cash");
+  }
+  if (f.includes("card")) {
+    return p.includes("card") || p.includes("debit") || p.includes("credit");
+  }
+  if (f.includes("upi") || f.includes("gpay")) {
+    return (
+      p.includes("upi") ||
+      p.includes("gpay") ||
+      p.includes("qr") ||
+      (!p.includes("cash") && !p.includes("card"))
+    );
+  }
+  return p === f;
+};
 
   const summarySales = selectedDate ? filteredByDate : filteredBySearch;
 
-  // Compute payment counts for current date/search scope
-  const paymentCounts = (summarySales || []).reduce(
-    (acc, s) => {
-      const p = s.payment || "UPI / GPay";
-      acc[p] = (acc[p] || 0) + 1;
-      return acc;
-    },
-    { "UPI / GPay": 0, Cash: 0, Card: 0 },
+  const paymentFiltered = summarySales.filter((s) =>
+    matchPaymentType(s.payment, paymentFilter)
   );
+
+  // Compute payment counts for current date/search scope
+  const paymentCounts = {
+    "UPI / GPay": (summarySales || []).filter((s) =>
+      matchPaymentType(s.payment, "UPI / GPay")
+    ).length,
+    Cash: (summarySales || []).filter((s) =>
+      matchPaymentType(s.payment, "Cash")
+    ).length,
+    Card: (summarySales || []).filter((s) =>
+      matchPaymentType(s.payment, "Card")
+    ).length,
+  };
 
   return (
     <AppLayout>
@@ -346,22 +408,28 @@ const Sales = () => {
       </div>
 
       {/* Payment Filter Pills */}
-      <div className="flex gap-2 mt-3 mb-3">
+      <div className="flex gap-2 mt-3 mb-3 flex-wrap">
         {[
-          { id: "ALL", label: `All (${sales.length})` },
+          { id: "ALL", label: `All (${summarySales.length})` },
           {
             id: "UPI / GPay",
-            label: `UPI (${sales.filter(s => (s.payment||"").includes("UPI")).length})`,
+            label: `UPI (${paymentCounts["UPI / GPay"]})`,
           },
-          { id: "Cash", label: `Cash (${sales.filter(s => (s.payment||"").includes("Cash")).length})` },
-          { id: "Card", label: `Card (${sales.filter(s => (s.payment||"").includes("Card")).length})` },
+          {
+            id: "Cash",
+            label: `Cash (${paymentCounts["Cash"]})`,
+          },
+          {
+            id: "Card",
+            label: `Card (${paymentCounts["Card"]})`,
+          },
         ].map((p) => (
           <button
             key={p.id}
             onClick={() => setPaymentFilter(p.id)}
-            className={`px-3 py-1.5 rounded-xl border text-sm font-bold ${
+            className={`px-3.5 py-1.5 rounded-xl border text-sm font-bold transition cursor-pointer ${
               paymentFilter === p.id
-                ? "bg-blue-50 text-blue-700 border-blue-300"
+                ? "bg-blue-50 text-blue-700 border-blue-300 shadow-sm"
                 : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
             }`}
           >
@@ -389,8 +457,17 @@ const Sales = () => {
               type="date"
               value={selectedDate}
               onChange={(e) => setSelectedDate(e.target.value)}
-              className="h-12 rounded-2xl bg-slate-50 border-2 border-slate-200 px-4 text-base text-slate-900 outline-none transition focus:border-blue-600 focus:bg-white focus:ring-4 focus:ring-blue-100"
+              className="h-12 rounded-2xl bg-slate-50 border-2 border-slate-200 px-4 text-base text-slate-900 outline-none transition focus:border-blue-600 focus:bg-white focus:ring-4 focus:ring-blue-100 font-bold"
             />
+            {selectedDate && (
+              <button
+                type="button"
+                onClick={() => setSelectedDate("")}
+                className="px-3.5 py-2.5 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition cursor-pointer"
+              >
+                All Dates
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -416,8 +493,14 @@ const Sales = () => {
             <tbody className="divide-y divide-slate-100 text-base">
               {paymentFiltered.map((inv) => {
                 const totalAmt = Number(inv.grandTotal ?? inv.total ?? 0);
-                const dueAmt = Number(inv.dueAmount ?? 0);
-                const paidAmt = Number(inv.paidAmount ?? (totalAmt - dueAmt));
+                const paidAmt = Number(
+                  inv.paidAmount !== undefined && inv.paidAmount !== null
+                    ? inv.paidAmount
+                    : inv.dueAmount !== undefined
+                    ? Math.max(0, totalAmt - Number(inv.dueAmount))
+                    : totalAmt
+                );
+                const dueAmt = Math.max(0, Number((totalAmt - paidAmt).toFixed(2)));
 
                 return (
                   <tr
@@ -438,15 +521,7 @@ const Sales = () => {
                       </div>
                     </td>
                     <td className="px-6 py-5 text-slate-600 text-sm font-semibold">
-                      {inv.items
-                        ? inv.items
-                            .map((item) =>
-                              item.medicine?.name
-                                ? `${item.medicine.name} - ${item.displayQuantity || item.quantity} ${item.unitType || "Tablet"}`
-                                : "Medicine item",
-                            )
-                            .join(", ")
-                        : `${inv.medicine?.name || "Medicine"} x${inv.quantity || 1}`}
+                      {formatInvoiceItems(inv.items, inv.medicine, inv.quantity)}
                     </td>
                     <td className="px-6 py-5">
                       <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold bg-slate-100 text-slate-800">
@@ -476,16 +551,7 @@ const Sales = () => {
                             id: inv.invoiceNumber || inv.id,
                             customer: inv.customerName || inv.customer,
                             customerMobile: inv.customerMobile || "",
-                            items:
-                              inv.items
-                                ? inv.items
-                                    .map((item) =>
-                                      item.medicine?.name
-                                        ? `${item.medicine.name} - ${item.displayQuantity || item.quantity} ${item.unitType || "Tablet"}`
-                                        : "Medicine item",
-                                    )
-                                    .join(", ")
-                                : `${inv.medicine?.name || "Medicine"} x${inv.quantity || 1}`,
+                            items: formatInvoiceItems(inv.items, inv.medicine, inv.quantity),
                             total: totalAmt,
                             paidAmount: paidAmt,
                             dueAmount: dueAmt,
@@ -502,6 +568,13 @@ const Sales = () => {
                   </tr>
                 );
               })}
+              {paymentFiltered.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-6 py-12 text-center text-slate-500 font-semibold">
+                    No {paymentFilter !== "ALL" ? paymentFilter : ""} transactions found {selectedDate ? `for ${selectedDate}` : ""}.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         )}
@@ -651,9 +724,39 @@ const Sales = () => {
                                     key={medicine._id}
                                     onMouseDown={(e) => e.preventDefault()}
                                     onClick={() => {
+                                      const existingIndex = form.items.findIndex(
+                                        (it, i) => i !== index && it.medicine === medicine._id
+                                      );
+
+                                      if (existingIndex !== -1) {
+                                        const updatedItems = [...form.items];
+                                        const currentQty = Number(updatedItems[existingIndex].quantity) || 1;
+                                        updatedItems[existingIndex].quantity = currentQty + 1;
+
+                                        toast.error(
+                                          `"${medicine.name}" bill me pehle se added hai! Quantity ++ kar di gayi hai.`
+                                        );
+
+                                        if (updatedItems.length > 1) {
+                                          updatedItems.splice(index, 1);
+                                        } else {
+                                          updatedItems[index] = {
+                                            medicine: "",
+                                            quantity: "",
+                                            unitType: "Tablet",
+                                            search: "",
+                                          };
+                                        }
+
+                                        setForm({ ...form, items: updatedItems });
+                                        setActiveDropdownIndex(null);
+                                        return;
+                                      }
+
                                       const updatedItems = [...form.items];
                                       updatedItems[index].medicine = medicine._id;
                                       updatedItems[index].search = medicine.name;
+                                      updatedItems[index].quantity = updatedItems[index].quantity || 1;
                                       updatedItems[index].unitType =
                                         categoryToUnitType(medicine.category);
                                       setForm({ ...form, items: updatedItems });

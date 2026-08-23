@@ -52,14 +52,28 @@ const MedicineForm = ({ onSuccess, onClose }) => {
     e.preventDefault();
     try {
       setLoading(true);
-      await addMedicine(formData);
-      toast.success(`Medicine "${formData.name}" added successfully!`);
+      const payload = {
+        name: (formData.name || "").trim(),
+        company: (formData.company || "").trim(),
+        category: (formData.category || "").trim(),
+        batchNo: (formData.batchNo || "").trim(),
+        expiryDate: formData.expiryDate,
+        purchasePrice: Number(formData.purchasePrice) || 0,
+        sellingPrice: Number(formData.sellingPrice) || 0,
+        stock: Number(formData.stock) || 0,
+        minimumStock: Number(formData.minimumStock) || 10,
+        packSize: Number(formData.packSize) || 10,
+      };
+      await addMedicine(payload);
+      toast.success(`Medicine "${payload.name}" added successfully!`);
       setFormData(initialState);
       if (onSuccess) onSuccess();
       if (onClose) onClose();
     } catch (err) {
-      console.error(err);
-      toast.error(err.response?.data?.message || "Failed to add medicine");
+      console.error("Add Medicine error:", err);
+      toast.error(
+        err.response?.data?.message || err.message || "Failed to add medicine"
+      );
     } finally {
       setLoading(false);
     }

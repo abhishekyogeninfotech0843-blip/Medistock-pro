@@ -11,7 +11,8 @@ const protect = (req, res, next) => {
     try {
       token = req.headers.authorization.split(" ")[1];
 
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const jwtSecret = process.env.JWT_SECRET || "medistock_jwt_secret_key_2026";
+      const decoded = jwt.verify(token, jwtSecret);
 
       req.user = decoded;
 

@@ -1,13 +1,18 @@
 # Dependencies
 node_modules/
+**/node_modules/
+node_modules - Copy/
+**/node_modules - Copy/
 client/node_modules/
 server/node_modules/
 
 # Production Builds & Output
 dist/
-client/dist/
 build/
+client/dist/
 client/build/
+server/dist/
+server/build/
 dist-ssr/
 
 # Logs & Debugging
@@ -24,10 +29,12 @@ lerna-debug.log*
 .env.local
 .env.*.local
 client/.env
+client/.env.local
 server/.env
+server/.env.local
 
 # IDE / Editor Files
-.vscode/*
+.vscode/
 !.vscode/extensions.json
 .idea/
 *.suo
@@ -49,3 +56,4 @@ Thumbs.db
 .cache/
 .vite/
 client/.vite/
+server/.vite/

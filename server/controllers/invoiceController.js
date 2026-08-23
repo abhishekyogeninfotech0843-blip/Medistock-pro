@@ -23,7 +23,26 @@ const normalizePayment = (payment) => {
 // ==========================
 const createInvoice = async (req, res) => {
   try {
-    const { customerName, items, discount, gst, payment, paidAmount, customerMobile } = req.body;
+    const { customerName, items: rawItems, discount, gst, payment, paidAmount, customerMobile } = req.body;
+
+    // Consolidate duplicate medicine entries in rawItems
+    const consolidatedMap = new Map();
+    (rawItems || []).forEach((item) => {
+      const medId = String(item.medicine || "");
+      if (!medId) return;
+
+      if (consolidatedMap.has(medId)) {
+        const existing = consolidatedMap.get(medId);
+        existing.displayQuantity =
+          (Number(existing.displayQuantity) || Number(existing.quantity) || 1) +
+          (Number(item.displayQuantity) || Number(item.quantity) || 1);
+        existing.quantity =
+          (Number(existing.quantity) || 1) + (Number(item.quantity) || 1);
+      } else {
+        consolidatedMap.set(medId, { ...item });
+      }
+    });
+    const items = Array.from(consolidatedMap.values());
 
     // ==========================
     // Generate Invoice Number
@@ -283,9 +302,26 @@ const downloadInvoicePDF = async (req, res) => {
     doc.text("Medicine                      Qty    Price    Total");
     doc.text("-------------------------------------------------------------");
 
-    // Items
-    invoice.items.forEach((item) => {
-      const line = `${item.medicine.name.padEnd(28, " ")} ${String(item.quantity).padStart(3, " ")}    ${String(item.sellingPrice).padStart(6, " ")}    ${String(item.total).padStart(6, " ")}`;
+    // Items (Consolidated)
+    const pdfMap = new Map();
+    (invoice.items || []).forEach((item) => {
+      const name = item.medicine?.name || "Medicine";
+      const key = `${name}___${item.unitType || "Tablet"}`;
+      const qty = Number(item.displayQuantity || item.quantity || 1);
+      const price = Number(item.sellingPrice || 0);
+      const total = Number(item.total || qty * price);
+
+      if (pdfMap.has(key)) {
+        const prev = pdfMap.get(key);
+        prev.qty += qty;
+        prev.total += total;
+      } else {
+        pdfMap.set(key, { name, qty, price, total });
+      }
+    });
+
+    Array.from(pdfMap.values()).forEach((item) => {
+      const line = `${item.name.padEnd(28, " ")} ${String(item.qty).padStart(3, " ")}    ${String(item.price).padStart(6, " ")}    ${String(item.total).padStart(6, " ")}`;
       doc.text(line);
     });
 
@@ -389,11 +425,26 @@ const updateInvoiceDue = async (req, res) => {
       return res.status(400).json({ success: false, message: "Valid payment amount required" });
     }
 
-    const previousDue = invoice.dueAmount || 0;
-    const actualPay = Math.min(previousDue, paymentAmount);
+    const grandTotal = Number(invoice.grandTotal || 0);
+    const currentPaid = Number(
+      invoice.paidAmount !== undefined && invoice.paidAmount !== null
+        ? invoice.paidAmount
+        : grandTotal
+    );
+    const currentDue = Math.max(0, grandTotal - currentPaid);
 
-    invoice.paidAmount = (invoice.paidAmount || 0) + actualPay;
-    invoice.dueAmount = Math.max(0, (invoice.dueAmount || 0) - actualPay);
+    if (currentDue <= 0) {
+      return res.status(400).json({ success: false, message: "Invoice is already paid in full" });
+    }
+
+    // Actual payment received cannot exceed current remaining due
+    const actualPay = Math.min(currentDue, paymentAmount);
+
+    const newPaidAmount = currentPaid + actualPay;
+    const newDueAmount = Math.max(0, grandTotal - newPaidAmount);
+
+    invoice.paidAmount = newPaidAmount;
+    invoice.dueAmount = newDueAmount;
     await invoice.save();
 
     // Reduce Customer dueBalance if customer exists
@@ -414,7 +465,7 @@ const updateInvoiceDue = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: `Payment of ₹${actualPay} recorded successfully`,
+      message: `Payment of ₹${actualPay} received. Remaining due: ₹${newDueAmount}`,
       data: updatedInvoice,
     });
   } catch (error) {
