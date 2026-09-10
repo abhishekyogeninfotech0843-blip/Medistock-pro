@@ -6,12 +6,12 @@ const AppLayout = ({ children, onQuickAdd }) => {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   return (
-    <div className="flex min-h-screen bg-slate-50 text-slate-800 font-sans relative overflow-x-hidden">
+    <div className="flex h-screen bg-slate-50 text-slate-800 font-sans overflow-hidden">
       <Sidebar
         mobileOpen={mobileSidebarOpen}
         onCloseMobile={() => setMobileSidebarOpen(false)}
       />
-      <div className="flex-1 flex flex-col min-w-0 overflow-x-hidden">
+      <div className="flex-1 flex flex-col h-screen min-w-0 overflow-y-auto overflow-x-hidden">
         <DashboardHeader
           onQuickAdd={onQuickAdd}
           onToggleMobile={() => setMobileSidebarOpen((prev) => !prev)}
@@ -25,3 +25,4 @@ const AppLayout = ({ children, onQuickAdd }) => {
 };
 
 export default AppLayout;
+
