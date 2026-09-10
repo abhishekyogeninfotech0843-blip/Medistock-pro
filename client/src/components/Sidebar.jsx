@@ -88,7 +88,7 @@ const Sidebar = ({ mobileOpen = false, onCloseMobile = () => {} }) => {
   ];
 
   const sidebarContent = (
-    <aside className="w-72 h-full min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 border-r border-slate-800 text-slate-300 flex flex-col justify-between z-30 font-sans shadow-2xl overflow-y-auto">
+    <aside className="w-72 h-full bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 border-r border-slate-800 text-slate-300 flex flex-col justify-between z-30 font-sans shadow-2xl overflow-y-auto">
       {/* Brand Header */}
       <div>
         <div className="p-6 border-b border-slate-800/80 flex items-center justify-between">
@@ -299,7 +299,7 @@ const Sidebar = ({ mobileOpen = false, onCloseMobile = () => {} }) => {
   return (
     <>
       {/* Desktop Fixed Sidebar */}
-      <div className="hidden lg:block shrink-0 sticky top-0 h-screen">
+      <div className="hidden lg:flex lg:flex-col shrink-0 h-screen w-72">
         {sidebarContent}
       </div>
 
@@ -319,7 +319,7 @@ const Sidebar = ({ mobileOpen = false, onCloseMobile = () => {} }) => {
               animate={{ x: 0 }}
               exit={{ x: "-100%" }}
               transition={{ type: "spring", damping: 25, stiffness: 200 }}
-              className="fixed inset-y-0 left-0 z-50 h-full lg:hidden"
+              className="fixed inset-y-0 left-0 z-50 h-full w-72 lg:hidden"
             >
               {sidebarContent}
             </motion.div>
