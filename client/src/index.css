@@ -68,3 +68,50 @@ aside::-webkit-scrollbar-thumb {
 aside::-webkit-scrollbar-thumb:hover {
   background: #475569;
 }
+
+/* =========================================
+   Print Styles for Clean Pharmacy Invoices
+   ========================================= */
+@media print {
+  @page {
+    margin: 8mm;
+    size: auto;
+  }
+
+  html, body, #root {
+    background-color: #ffffff !important;
+    color: #0f172a !important;
+    height: auto !important;
+    min-height: auto !important;
+    overflow: visible !important;
+  }
+
+  /* Hide everything on the page by default */
+  body * {
+    visibility: hidden;
+  }
+
+  /* Only make printable tax invoice visible */
+  #printable-tax-invoice,
+  #printable-tax-invoice * {
+    visibility: visible;
+  }
+
+  #printable-tax-invoice {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 10px !important;
+    box-shadow: none !important;
+    border: none !important;
+    background: #ffffff !important;
+  }
+
+  .no-print,
+  button {
+    display: none !important;
+  }
+}
